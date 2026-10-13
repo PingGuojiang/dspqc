@@ -1,0 +1,194 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #11141d;
+  --ink: #e2e8f0;
+  --accent: #ff0055;
+  --cyan: #00f0ff;
+  --amber: #fbbf24;
+  --border-thick: 2px;
+}
+
+@layer base {
+  body {
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    overflow-x: hidden;
+  }
+}
+
+::selection {
+  background: var(--cyan);
+  color: #000;
+}
+
+/* Variation 6: Playful Industrial Logo Font */
+.font-logo {
+  font-family: 'Gaegu', cursive, sans-serif;
+}
+
+.font-mono,
+.font-space {
+  font-family: 'Space Mono', monospace;
+}
+
+/* Variation 6: Pixel label */
+.pixel-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  color: var(--cyan);
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Playful Industrial Buttons */
+.btn-playful {
+  border: var(--border-thick) solid #2d3748;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 3px 3px 0px rgba(0, 0, 0, 0.5);
+  transition: all 0.1s ease;
+  user-select: none;
+}
+
+.btn-playful:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px rgba(0, 0, 0, 0.5);
+}
+
+.btn-accent {
+  background: var(--accent);
+  color: #fff;
+  border-color: #80002b;
+  box-shadow: 3px 3px 0px #80002b;
+}
+
+.btn-cyan {
+  background: var(--cyan);
+  color: #000;
+  border-color: #008899;
+  box-shadow: 3px 3px 0px #00a0aa;
+}
+
+.number-display {
+  font-family: 'Space Mono', monospace;
+  color: var(--amber);
+  line-height: 1;
+}
+
+.loop-return {
+  border: 2px dashed var(--amber);
+  padding: 4px 10px;
+  border-radius: 4px;
+  color: var(--amber);
+  font-size: 0.72rem;
+  font-family: 'Space Mono', monospace;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(251, 191, 36, 0.06);
+}
+
+/* Custom sci-fi industrial scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #090d16;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Pixel / Grid backdrop */
+.bg-dsp-grid {
+  background-size: 24px 24px;
+  background-image: 
+    linear-gradient(to right, rgba(14, 165, 233, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(14, 165, 233, 0.04) 1px, transparent 1px);
+}
+
+.bg-dsp-dots {
+  background-size: 16px 16px;
+  background-image: radial-gradient(rgba(14, 165, 233, 0.12) 1px, transparent 1px);
+}
+
+/* Tech panel card glow */
+.hud-border {
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  box-shadow: 0 0 15px -3px rgba(14, 165, 233, 0.07);
+}
+
+.hud-border-warning {
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 15px -3px rgba(245, 158, 11, 0.15);
+}
+
+.hud-border-danger {
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 20px -3px rgba(239, 68, 68, 0.25);
+}
+
+@keyframes belt-flow {
+  0% { stroke-dashoffset: 24; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.animate-belt-flow {
+  animation: belt-flow 1.2s linear infinite;
+}
+
+/* Belt items continuous conveyor translation */
+@keyframes belt-conveyor-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(calc(-100% - 10px));
+  }
+}
+
+/* Linear conveyor track texture moving effect */
+@keyframes belt-texture-move {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 40px 0;
+  }
+}
+
+.animate-belt-track {
+  animation: belt-texture-move 1.5s linear infinite;
+}
+
+/* Subtle idle bob & shimmer for items on the belt */
+@keyframes belt-item-shimmer {
+  0%, 100% {
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 4px 8px rgba(6, 182, 212, 0.35));
+  }
+}
+
+.animate-item-shimmer {
+  animation: belt-item-shimmer 2.4s ease-in-out infinite;
+}
+
