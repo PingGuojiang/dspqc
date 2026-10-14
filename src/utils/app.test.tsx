@@ -15,8 +15,15 @@ test('mode switches preserve actual mounted 2D canvases and independent configur
   const ui=render(<App/>);
   try {
     const mixed=ui.getByTestId('mixed-workspace');
-    const mixedSvg=mixed.querySelector('svg[viewBox]');
+    const mixedSvg=mixed.querySelector('.bg-dsp-grid svg[viewBox]');
     assert.ok(mixedSvg);
+    const mixedStage=mixed.querySelector('.bg-dsp-grid')!;
+    const originalWidth=mixedSvg.getAttribute('width');
+    fireEvent.wheel(mixedStage,{deltaY:-120,clientX:200,clientY:100});
+    assert.equal(mixedSvg.getAttribute('width'),originalWidth);
+    assert.match((mixedSvg.parentElement as HTMLElement).style.transform,/translate.*scale/);
+    assert.equal(mixedStage.scrollTop,0);
+    const stableTransform=(mixedSvg.parentElement as HTMLElement).style.transform;
     fireEvent.click(ui.getByRole('button',{name:'普通量化模式'}));
     assert.equal(mixed.hidden,true);
     const ordinary=ui.getByTestId('ordinary-workspace');
@@ -26,7 +33,8 @@ test('mode switches preserve actual mounted 2D canvases and independent configur
     fireEvent.click(ui.getByLabelText('放大生产图'));
     fireEvent.click(ui.getByRole('button',{name:'混带模式'}));
     assert.equal(mixed.hidden,false);
-    assert.equal(mixed.querySelector('svg[viewBox]'),mixedSvg);
+    assert.equal(mixed.querySelector('.bg-dsp-grid svg[viewBox]'),mixedSvg);
+    assert.equal((mixedSvg.parentElement as HTMLElement).style.transform,stableTransform);
     fireEvent.click(ui.getByRole('button',{name:'普通量化模式'}));
     assert.equal(ui.getByRole('img',{name:'完整生产链图'}),normalSvg);
     assert.equal((ui.getByLabelText('目标产量 1') as HTMLInputElement).value,'180');
@@ -35,12 +43,15 @@ test('mode switches preserve actual mounted 2D canvases and independent configur
     assert.equal(saved.ordinary.input.targets[0].ratePerMinute,180);
     assert.equal(saved.mixed.input.beltStackLayers,1);
     fireEvent.click(ui.getByText('全局设置'));
+    assert.ok(ui.getByRole('dialog', {name:'全局设置'}));
+    fireEvent.click(ui.getByRole('button', {name:'打开普通量化模式设定'}));
     assert.ok(ui.getByRole('dialog', {name:'普通量化模式设定'}));
     fireEvent.click(ui.getByRole('button', {name:'普通模式传送带 B1'}));
     assert.equal((ui.getByLabelText('生产传送带') as HTMLSelectElement).value, '1');
     fireEvent.click(ui.getByRole('button', {name:'完成并应用'}));
     fireEvent.click(ui.getByRole('button', {name:'混带模式'}));
     fireEvent.click(ui.getByText('全局设置'));
+    fireEvent.click(ui.getByRole('button', {name:'打开混带模式设定'}));
     assert.ok(ui.getByRole('dialog', {name:'混带模式设定'}));
     fireEvent.click(ui.getByRole('button', {name:'完成并应用'}));
     fireEvent.click(ui.getByRole('button', {name:'普通量化模式'}));

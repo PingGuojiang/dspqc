@@ -1,3 +1,4 @@
+import { matchesSearch } from '../utils/search';
 import { useDSPItems } from '../data/GameDataContext';
 import React, { useState } from 'react';
 import { 
@@ -118,7 +119,7 @@ export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
 
   // Filter recipes for the expanded matrix
   const filteredRecipes = DSP_RECIPES.filter(r => {
-    const matchText = r.name.toLowerCase().includes(search.toLowerCase());
+    const matchText = matchesSearch(r.name, search);
     if (!matchText) return false;
 
     if (selectedCategoryTab === 'all') return true;
@@ -167,35 +168,29 @@ export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
       {/* ============================================================== */}
       <div 
         onClick={() => setIsExpanded(!isExpanded)}
-        className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 cursor-pointer hover:bg-slate-900/60 transition select-none bg-[#0e121c]"
+        className="mixed-parameter-bar px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 cursor-pointer hover:bg-slate-900/60 transition select-none bg-[#0e121c]"
       >
         {/* Left: Active Product & Recipe Summary */}
         <div className="flex items-center gap-2.5 min-w-0">
           <DSPFramedItemIcon item={primaryOutputItem} size={24} />
           
-          <div className="flex flex-wrap items-baseline gap-2 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <span className="text-sm font-bold text-white tracking-wide truncate">
               {recipe.name}
             </span>
-            <span className="pixel-label">
+            <span className="parameter-nameplate">
               CYCLE: {recipe.craftTime}s
             </span>
             <span className="text-[11px] text-slate-400 font-mono hidden sm:inline">
               ({recipe.inputs.length}原料)
             </span>
             <span className="text-slate-600 hidden sm:inline">|</span>
-            <span className="text-[11px] font-mono text-cyan-300 bg-cyan-950/40 border border-cyan-800/60 px-1.5 py-0.5 rounded">
-              {facility.name} ({facility.speedMultiplier}x)
-            </span>
-            <span className="text-slate-600 hidden md:inline">|</span>
-            <span className="text-[11px] font-mono text-slate-300 hidden md:flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 px-1.5 py-0.5 rounded">
-              <DSPBeltIcon belt={belt} size={14} />
-              <span>{belt.name.split(' ')[0]} ({beltStackLayers}层 · {result.beltCapacity}/s)</span>
-            </span>
+            <button type="button" className="parameter-key" aria-label="调整混带建筑" onClick={e=>{e.stopPropagation();setIsExpanded(true);}}><span>{facility.name} ({facility.speedMultiplier}x)</span><ChevronDown size={12}/></button>
+            <button type="button" className="parameter-key" aria-label="调整混带传送带" onClick={e=>{e.stopPropagation();onOpenGlobalDrawer();}}><DSPBeltIcon belt={belt} size={14}/><span>{belt.name.split(' ')[0]} ({beltStackLayers}层 · {result.beltCapacity}/s)</span><ChevronDown size={12}/></button>
 
             {/* Proliferator Pill in Collapsed Bar */}
             <span className="text-slate-600 hidden lg:inline">|</span>
-            <div
+            <button type="button" aria-label="快速切换混带增产剂"
               onClick={e => {
                 e.stopPropagation();
                 onChangeInput(prev => {
@@ -208,7 +203,7 @@ export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
                   return { ...prev, proliferatorTier: 0, proliferatorMode: 'none', customFacilityCount: undefined };
                 });
               }}
-              className={`hidden lg:flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer transition select-none border ${
+              className={`parameter-key flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono cursor-pointer transition select-none border ${
                 inputState.proliferatorTier === 0
                   ? 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
                   : inputState.proliferatorMode === 'output'
@@ -225,7 +220,8 @@ export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
               ) : (
                 <span>额外速度 (进料{result.proliferatorComparison.baselineTotalFeedDemand}→{result.proliferatorComparison.currentTotalFeedDemand}/s)</span>
               )}
-            </div>
+              <ChevronDown size={12}/>
+            </button>
           </div>
         </div>
 
@@ -278,7 +274,7 @@ export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
 
           <button
             type="button"
-            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-cyan-400 hover:text-cyan-300 bg-cyan-950/40 border border-cyan-800/80 rounded transition"
+            className="parameter-key flex items-center gap-1 px-2 py-1 text-xs font-medium text-cyan-400 hover:text-cyan-300 bg-cyan-950/40 border border-cyan-800/80 rounded transition"
           >
             <span>{isExpanded ? '收起' : '换配方'}</span>
             {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -293,13 +289,14 @@ export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
         <div className="p-4 border-t border-slate-800/90 space-y-3 bg-[#0b0e17]">
           {/* Quick Facility Pills Bar */}
           <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800/60">
-            <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
-              <span className="text-slate-400 text-[11px] shrink-0 font-medium">制造设施倍率:</span>
+            <div className="facility-preset-row flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-slate-400 text-[11px] shrink-0 font-medium">{recipe.facilityCategory==='lab'?'研究站 · 矩阵生产速度':'生产建筑 · 速度倍率'}</span>
               {facilityList.map(f => {
                 const isSelected = facility.id === f.id;
                 return (
                   <button
                     key={f.id}
+                    aria-pressed={isSelected}
                     type="button"
                     onClick={() => onChangeInput(prev => ({ ...prev, facility: f, customFacilityCount: undefined }))}
                     className={`px-2.5 py-1 rounded text-xs transition whitespace-nowrap font-mono ${
@@ -308,7 +305,7 @@ export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
                         : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    {f.name.split(' ')[0]} ({f.speedMultiplier}x)
+                    {f.name} · {f.speedMultiplier}x
                   </button>
                 );
               })}
@@ -330,10 +327,12 @@ export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
                 className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded transition"
               >
                 <Sliders className="w-3 h-3 text-cyan-400" />
-                <span>全局设置</span>
+                <span>混带设定</span>
               </button>
             </div>
           </div>
+
+          <p className="text-[11px] text-slate-400">{recipe.facilityCategory==='lab'?'矩阵配方使用研究站：矩阵研究站 1×、自演化研究站 3×；制造台不适用于此配方':recipe.facilityCategory==='assembler'?'制造台速度：Mk.I 0.75×、Mk.II 1×、Mk.III 1.5×、重组式制造台 3×':'仅显示适用于当前配方的生产建筑'} 倍率指配方生产速度，增产剂加速单独计算</p>
 
           {/* Quick Proliferator Mode Comparison Strip */}
           <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 text-xs">
@@ -475,7 +474,7 @@ export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
                   type="text"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="搜索配方 (如: 制造台 / 熔炉)..."
+                  placeholder="中文 / 拼音 / 首字母搜索..."
                   className="w-full pl-8 pr-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-cyan-500 font-sans shadow-inner placeholder:text-slate-600"
                 />
               </div>

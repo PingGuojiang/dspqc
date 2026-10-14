@@ -1,3 +1,4 @@
+import { matchesSearch } from '../utils/search';
 import React, { useState } from 'react';
 import { 
   Settings2, 
@@ -66,7 +67,7 @@ export const ConfigCard: React.FC<ConfigCardProps> = ({
 
   // Filter recipes based on tab and search
   const filteredRecipes = DSP_RECIPES.filter(r => {
-    const matchText = r.name.toLowerCase().includes(recipeSearch.toLowerCase());
+    const matchText = matchesSearch(r.name, recipeSearch);
     if (!matchText) return false;
     if (selectedCategoryTab === 'all') return true;
     if (selectedCategoryTab === 'mixed') return r.inputs.length >= 2;

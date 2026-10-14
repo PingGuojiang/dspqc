@@ -86,8 +86,8 @@ export const DSP_FACILITIES: DSPFacility[] = [
   { id: 'smelter_negentropy', numericId: 2319, name: '负熵熔炉 (Mk.III)', category: 'smelter', speedMultiplier: 3.0, powerMW: 2.88, color: '#a855f7', iconName: 'negentropy' },
 
   // Labs
-  { id: 'lab_1', numericId: 2901, name: '矩阵研究站 (Mk.I)', category: 'lab', speedMultiplier: 1.0, powerMW: 0.48, color: '#3b82f6', iconName: 'lab' },
-  { id: 'lab_self_evolution', numericId: 2902, name: '自化矩阵研究站', category: 'lab', speedMultiplier: 3.0, powerMW: 1.92, color: '#ec4899', iconName: 'lab-2' },
+  { id: 'lab_1', numericId: 2901, name: '矩阵研究站', category: 'lab', speedMultiplier: 1.0, powerMW: 0.48, color: '#3b82f6', iconName: 'lab' },
+  { id: 'lab_self_evolution', numericId: 2902, name: '自演化研究站', category: 'lab', speedMultiplier: 3.0, powerMW: 1.92, color: '#ec4899', iconName: 'lab-2' },
 
   // Chemical & Refinery
   { id: 'chemical_1', numericId: 2309, name: '化工厂', category: 'chemical', speedMultiplier: 1.0, powerMW: 0.72, color: '#10b981', iconName: 'chemical-plant' },

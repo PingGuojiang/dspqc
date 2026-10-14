@@ -1,3 +1,4 @@
+import { matchesSearch } from '../utils/search';
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { useDSPItems } from '../data/GameDataContext';
 import { DSPFramedItemIcon } from './DSPItemIcon';
@@ -19,7 +20,7 @@ export function ProductionItemPicker({ label, value, options, onChange }: Props)
   const search = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const name = (itemId: string) => items[itemId]?.name || itemId;
-  const filtered = options.filter(itemId => `${name(itemId)} ${itemId}`.toLowerCase().includes(query.toLowerCase()));
+  const filtered = options.filter(itemId => matchesSearch(name(itemId), query, [itemId]));
   const close = () => { setOpen(false); trigger.current?.focus(); };
   const choose = (itemId: string) => { onChange(itemId); close(); };
   useEffect(() => {
@@ -41,7 +42,7 @@ export function ProductionItemPicker({ label, value, options, onChange }: Props)
       if (event.key === 'Enter' && filtered[active]) { event.preventDefault(); choose(filtered[active]); }
       if (event.key === 'Tab') setOpen(false);
     }}>
-      <input ref={search} aria-label={`搜索${label}`} value={query} onChange={event => { setQuery(event.target.value); setActive(0); }} aria-controls={`${id}-list`} aria-activedescendant={filtered[active] ? `${id}-option-${active}` : undefined} placeholder="搜索物品名称 / ID" className="w-full min-w-0 bg-slate-900 border border-slate-700 rounded px-2 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-400" />
+      <input ref={search} aria-label={`搜索${label}`} value={query} onChange={event => { setQuery(event.target.value); setActive(0); }} aria-controls={`${id}-list`} aria-activedescendant={filtered[active] ? `${id}-option-${active}` : undefined} placeholder="中文 / 拼音 / 首字母 / ID" className="w-full min-w-0 bg-slate-900 border border-slate-700 rounded px-2 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-400" />
       <div id={`${id}-list`} role="listbox" aria-label={`${label} 列表`} className="max-h-64 overflow-y-auto mt-2 space-y-1">
         {filtered.map((itemId, index) => <button key={itemId} id={`${id}-option-${index}`} data-option-index={index} type="button" role="option" aria-label={name(itemId)} aria-selected={itemId === value} tabIndex={-1} onPointerMove={() => setActive(index)} onClick={() => choose(itemId)} className={`flex items-center gap-2 w-full p-1.5 rounded text-left text-xs ${index === active ? 'bg-cyan-950/60 text-cyan-200' : 'text-slate-300 hover:bg-slate-800'}`}><DSPFramedItemIcon item={items[itemId]} size={20} /><span className="truncate flex-1">{name(itemId)}</span>{itemId === value && <span className="text-cyan-300">✓</span>}</button>)}
         {!filtered.length && <p className="text-xs text-slate-500 p-2">没有匹配的物品</p>}

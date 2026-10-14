@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useReducer, useRef } from 'react';
-import { Menu, Sliders, BookOpen, Check, Link as LinkIcon, Undo2 } from 'lucide-react';
+import { Sun, Moon, Menu, Sliders, BookOpen, Check, Link as LinkIcon, Undo2 } from 'lucide-react';
 import { DSP_RECIPES, DSP_BELTS, DSP_ITEMS, importCustomGameData, type DSPRecipe } from './data/dspData';
 import { GameDataProvider } from './data/GameDataContext';
 import { calculateDSPMixedBelt, supportsMixedRecipe, type CalculationInput } from './engine/calculator';
@@ -16,7 +16,11 @@ import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { OrdinarySettingsDrawer } from './components/OrdinarySettingsDrawer';
 
+import { AppearanceSettings, readAppearance } from './components/AppearanceSettings';
 export default function App() {
+  const [appearance,setAppearance]=useState(readAppearance);
+  const [appearanceOpen,setAppearanceOpen]=useState(false);
+  useEffect(()=>{document.documentElement.dataset.theme=appearance.theme;document.documentElement.style.fontSize=appearance.size+'px';document.documentElement.style.setProperty('--ui-font',appearance.font==='custom'?JSON.stringify(appearance.customFont||'system-ui')+', system-ui, sans-serif':appearance.font==='mono'?"'Space Mono', 'Microsoft YaHei', monospace":appearance.font==='system'?"system-ui, sans-serif":"'Inter', 'Microsoft YaHei', sans-serif");try{localStorage.setItem('dsp-appearance',JSON.stringify(appearance));}catch{}},[appearance]);
   const [state, dispatch] = useReducer(workspaceReducer, undefined, () => {
     let initial=createWorkspaces();
     if (typeof window==='undefined') return initial;
@@ -104,14 +108,14 @@ export default function App() {
         <div className="flex items-center gap-2.5 shrink-0">
           <button
             type="button"
-            onClick={openSettings}
+            onClick={()=>setAppearanceOpen(true)}
             className="p-1.5 text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border-2 border-[#2d3748] rounded-lg shadow-[2px_2px_0px_rgba(0,0,0,0.5)] transition active:translate-x-0.5 active:translate-y-0.5"
-            title="打开全局设置抽屉 (科技/带速/增产)"
+            aria-label="打开全局设置" title="字体、字号与显示主题"
           >
             <Menu className="w-4 h-4 text-cyan-400" />
           </button>
 
-          <a href="/" className="flex items-baseline gap-2.5 select-none">
+          <a href={import.meta.env?.BASE_URL ?? "/"} className="flex items-center gap-2.5 select-none">
             <span 
               className="font-logo text-2xl sm:text-3xl text-white -rotate-1 tracking-wide leading-none inline-block hover:rotate-0 transition-transform" 
               style={{ textShadow: '2.5px 2.5px 0px #ff0055' }}
@@ -125,43 +129,19 @@ export default function App() {
         </div>
 
         {/* Zone 2: Navigation Links & Telemetry */}
-        <nav className="hidden md:flex items-center gap-4 text-xs font-medium text-slate-400 font-mono">
-          <span className="pixel-label hidden xl:inline-flex">CPU_OPTIMIZED</span>
+        <nav className="header-tools hidden md:flex items-center gap-4 text-xs font-medium text-slate-400 font-mono">
+          <span className="pixel-label hidden xl:inline-flex">LOCAL_ENGINE</span>
           <span className="pixel-label hidden xl:inline-flex" style={{ color: '#ff0055', borderColor: 'rgba(255,0,85,0.4)', background: 'rgba(255,0,85,0.08)' }}>
-            AUTO_SAVE_ON
+            自动保存
           </span>
 
           <button
             type="button"
-            onClick={openSettings}
+            onClick={()=>setAppearanceOpen(true)}
             className="hover:text-cyan-400 transition-colors flex items-center gap-1.5 text-slate-300 px-2 py-1 rounded-md bg-slate-900/80 border border-slate-800 hover:border-slate-700"
           >
             <Sliders className="w-3.5 h-3.5 text-cyan-400" />
             <span>全局设置</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('schematic')}
-            className={`hover:text-cyan-400 transition-colors px-2.5 py-1 rounded-md ${
-              activeTab === 'schematic' 
-                ? 'text-cyan-300 font-bold bg-cyan-950/60 border border-cyan-500/50 shadow-xs' 
-                : 'text-slate-400'
-            }`}
-          >
-            2D排布图
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('metrics')}
-            className={`hover:text-cyan-400 transition-colors px-2.5 py-1 rounded-md ${
-              activeTab === 'metrics' 
-                ? 'text-cyan-300 font-bold bg-cyan-950/60 border border-cyan-500/50 shadow-xs' 
-                : 'text-slate-400'
-            }`}
-          >
-            量化面板
           </button>
 
           <button
@@ -176,6 +156,7 @@ export default function App() {
 
         {/* Zone 3: Undo Button + Share URL + PWA Install */}
         <div className="flex items-center gap-2 shrink-0">
+          <button type="button" aria-label={appearance.theme==='dark'?'切换亮色主题':'切换暗色主题'} onClick={()=>setAppearance({...appearance,theme:appearance.theme==='dark'?'light':'dark'})} className="p-2 rounded-lg border-2 border-slate-700 text-amber-400">{appearance.theme==='dark'?<Sun size={18}/>:<Moon size={18}/>}</button>
           {/* Undo Action Button */}
           <button
             type="button"
@@ -206,13 +187,13 @@ export default function App() {
             {shareToast ? (
               <>
                 <Check className="w-3.5 h-3.5 text-white" />
-                <span>COPIED!</span>
+                <span>已复制</span>
               </>
             ) : (
               <>
                 <LinkIcon className="w-3.5 h-3.5 text-white" />
-                <span className="hidden sm:inline">SHARE_STATE</span>
-                <span className="sm:hidden">SHARE</span>
+                <span className="hidden sm:inline">分享方案</span>
+                <span className="sm:hidden">分享</span>
               </>
             )}
           </button>
@@ -224,15 +205,15 @@ export default function App() {
       {/* ============================================================== */}
       {/* MAIN VIEWPORT: HIGH-DENSITY FACTORIOLAB ARCHITECTURE */}
       {/* ============================================================== */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 space-y-4">
+      <main className="planner-main flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 py-4 space-y-4">
         <div className="flex flex-wrap justify-between gap-3 items-center border-b-2 border-[#2d3748] pb-3">
           <div className="flex gap-2 p-1 bg-slate-900 border-2 border-[#2d3748] rounded-xl shadow-[3px_3px_0px_rgba(0,0,0,0.5)]">
             {([['mixed','混带模式'],['ordinary','普通量化模式']] as const).map(([mode,label])=><button key={mode} type="button" aria-pressed={activeMode===mode} onClick={()=>switchMode(mode)} className={`px-3 py-2 text-sm font-bold rounded-lg border-2 transition-colors ${activeMode===mode?'text-cyan-300 bg-cyan-500/20 border-cyan-400/80':'text-slate-400 border-transparent hover:text-white'}`}>{label}</button>)}
           </div>
           <div className="flex flex-wrap gap-2 text-xs">
-            <button type="button" onClick={()=>setIsCustomModalOpen(true)} className="pixel-label hover:text-cyan-300">新建当前模式配方</button>
-            <button type="button" onClick={()=>fileInput.current?.click()} className="pixel-label hover:text-cyan-300">导入当前模式数据</button>
-            <button type="button" onClick={handleResetDefaults} className="pixel-label hover:text-rose-300">重置当前模式</button>
+            <button type="button" onClick={()=>setIsCustomModalOpen(true)} className="workspace-action pixel-label hover:text-cyan-300">新建当前模式配方</button>
+            <button type="button" onClick={()=>fileInput.current?.click()} className="workspace-action pixel-label hover:text-cyan-300">导入当前模式数据</button>
+            <button type="button" onClick={handleResetDefaults} className="workspace-action pixel-label hover:text-rose-300">重置当前模式</button>
             <input ref={fileInput} type="file" accept=".json,application/json" hidden onChange={handleImportFile}/>
           </div>
         </div>
@@ -324,7 +305,7 @@ export default function App() {
 
       {/* Footer from Variation 6 */}
       <footer className="mt-auto border-t-2 border-[#2d3748] bg-[#0c0e15] px-4 py-3 text-xs text-slate-400 font-mono">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="font-bold text-slate-300">DSP MIX-MAX // PRODUCTION PLANNER</span>
             <span className="text-slate-600 hidden sm:inline">|</span>
@@ -358,6 +339,7 @@ export default function App() {
 
       {/* Side Drawer for Global Settings */}
       <GameDataProvider items={state.mixed.items}>
+      {appearanceOpen&&<AppearanceSettings value={appearance} onChange={setAppearance} onClose={()=>setAppearanceOpen(false)} mode={activeMode==='mixed'?'混带模式':'普通量化模式'} onModeSettings={()=>{setAppearanceOpen(false);openSettings();}}/>}
       <GlobalDrawer
         isOpen={isDrawerOpen && activeMode==='mixed'}
         onImportData={handleImport}

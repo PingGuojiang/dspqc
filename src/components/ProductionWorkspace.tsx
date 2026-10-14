@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import { Factory, Zap, Layers } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
 import { DSP_BELTS, DSP_FACILITIES, DSP_RECIPES, getRecipeMultipliers, isFacilityCompatible } from '../data/dspData';
 import type { DSPRecipe } from '../data/dspData';
 import { useDSPItems } from '../data/GameDataContext';
@@ -23,6 +24,7 @@ const format = (value: number) => value.toLocaleString(undefined, { maximumFract
 
 export function ProductionWorkspace({ input, onChange, view, onViewChange, onCopyToMixed, recipes = DSP_RECIPES }: ProductionWorkspaceProps) {
   const items = useDSPItems();
+  const [mobileSection,setMobileSection]=useState<'config'|'result'>('config');
   const result = useMemo(() => calculateProduction(input, recipes), [input, recipes]);
   const options = useMemo(() => Array.from(new Set([...Object.entries(items).filter(([id, item]) => item.id === id).map(([id]) => id), ...recipes.flatMap(r => [...r.inputs, ...r.outputs].map(i => i.itemId))])).sort((a, b) => (items[a]?.name || a).localeCompare(items[b]?.name || b)), [items, recipes]);
   const itemName = (id: string) => items[id]?.name || id;
@@ -42,10 +44,17 @@ export function ProductionWorkspace({ input, onChange, view, onViewChange, onCop
     return [...reached];
   }, [input.targets, input.externalSupplies, input.recipeSelection, recipes]);
   const beltCapacity = (DSP_BELTS.find(b => b.tier === input.beltTier)?.baseSpeed || 0) * input.beltStackLayers * 60;
-  return <div className="space-y-4 text-slate-200">
-    <div className="grid lg:grid-cols-2 gap-4">
+  return <div className="production-console text-slate-200">
+    <div className="mobile-section-switch lg:hidden flex gap-2 mb-4" aria-label="普通量化工作区分区">
+      <button type="button" className={button} aria-pressed={mobileSection==='config'} onClick={()=>setMobileSection('config')}>生产配置</button>
+      <button type="button" className={button} aria-pressed={mobileSection==='result'} onClick={()=>setMobileSection('result')}>查看结果</button>
+    </div>
+    <div className="lg:grid lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[400px_minmax(0,1fr)] gap-5 items-start">
+    <div data-production-config className={`production-config space-y-4 ${mobileSection==='result'?'hidden lg:block':''}`}>
+    <div className="flex items-center justify-between"><h2 className="text-lg font-bold text-white">生产配置</h2><span className="pixel-label">INPUT PANEL</span></div>
+    <div className="grid gap-4">
       <section className={panel} aria-label="生产目标">
-        <div className="flex justify-between items-center"><span className="pixel-label">TARGETS / MIN</span><button type="button" className={button} onClick={() => update({ targets: [...input.targets, { itemId: options.find(id => !input.targets.some(t => t.itemId === id)) || options[0], ratePerMinute: 60 }] })}>添加目标</button></div>
+        <div className="flex justify-between items-center"><h3 className="font-bold text-sm">生产目标 <span className="text-[10px] text-slate-500 font-mono ml-1">/ MIN</span></h3><button type="button" className={button} onClick={() => update({ targets: [...input.targets, { itemId: options.find(id => !input.targets.some(t => t.itemId === id)) || options[0], ratePerMinute: 60 }] })}>添加目标</button></div>
         {input.targets.map((target, index) => <div key={index} className="flex gap-2 items-center">
           <ProductionItemPicker label={`目标物品 ${index + 1}`} value={target.itemId} options={options} onChange={value => update({ targets: input.targets.map((t, i) => i === index ? { ...t, itemId: value } : t) })} />
           <input aria-label={`目标产量 ${index + 1}`} className={`${field} w-20 sm:w-28`} type="number" min="0" step="any" value={target.ratePerMinute} onChange={e => update({ targets: input.targets.map((t, i) => i === index ? { ...t, ratePerMinute: Number(e.target.value) } : t) })} />
@@ -53,7 +62,7 @@ export function ProductionWorkspace({ input, onChange, view, onViewChange, onCop
         </div>)}
       </section>
       <section className={panel} aria-label="外部供应">
-        <div className="flex justify-between items-center"><span className="pixel-label">EXTERNAL_SUPPLY</span><button type="button" className={button} onClick={() => update({ externalSupplies: [...input.externalSupplies, { itemId: options.find(id => !input.externalSupplies.some(s => s.itemId === id)) || options[0] }] })}>添加外供</button></div>
+        <div className="flex justify-between items-center"><h3 className="font-bold text-sm">外部供应</h3><button type="button" className={button} onClick={() => update({ externalSupplies: [...input.externalSupplies, { itemId: options.find(id => !input.externalSupplies.some(s => s.itemId === id)) || options[0] }] })}>添加外供</button></div>
         <p className="text-xs text-slate-400">原矿及尚未建模的采集/特殊产物默认外供；指定中间产物后截断其生产链，上限不足将计算失败。上限留空为不限，单位 /min。</p>
         {input.externalSupplies.map((supply, index) => <div key={index} className="flex gap-2 items-center">
           <ProductionItemPicker label={`外供物品 ${index + 1}`} value={supply.itemId} options={options} onChange={value => update({ externalSupplies: input.externalSupplies.map((s, i) => i === index ? { ...s, itemId: value } : s) })} />
@@ -62,8 +71,7 @@ export function ProductionWorkspace({ input, onChange, view, onViewChange, onCop
         </div>)}
       </section>
     </div>
-    <section className={panel} aria-label="配方与建筑">
-      <span className="pixel-label">RECIPES / FACILITIES</span>
+    <details open className={panel} aria-label="配方与建筑"><summary className="font-bold text-sm cursor-pointer text-cyan-200">配方与建筑 <span className="text-xs text-slate-500">· 点击收起</span></summary>
       {relevantItems.map(id => {
         const alternatives = recipes.filter(r => r.outputs.some(o => o.itemId === id) && (DSP_FACILITIES.some(f => isFacilityCompatible(r, f)) || r.id === input.recipeSelection[id]));
         const recipe = input.externalSupplies.some(s => s.itemId === id) ? undefined : chooseProductionRecipe(id, recipes, input.recipeSelection);
@@ -75,23 +83,32 @@ export function ProductionWorkspace({ input, onChange, view, onViewChange, onCop
           update({ recipeSelection: selection });
         };
         const selector = alternatives.length ? <select aria-label={`配方 ${id}`} className={field} value={input.recipeSelection[id] || recipe?.id || ''} onChange={e => selectRecipe(e.target.value)}><option value="">{defaultRecipe ? `默认：${defaultRecipe.name}` : '外部供应（默认）'}</option>{alternatives.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select> : null;
-        if (!recipe) return <div key={id} data-boundary-item={id} className="grid sm:grid-cols-5 gap-2 items-center border-t border-[#2d3748] pt-3"><div className="text-sm text-cyan-300 min-w-0">{itemLabel(id)}</div>{selector}<span className="text-xs text-slate-400 sm:col-span-3">{input.externalSupplies.some(s => s.itemId === id) ? '指定外部供应（生产链截断）' : '外部供应（默认）'}</span></div>;
+        if (!recipe) return <div key={id} data-boundary-item={id} className="grid grid-cols-2 gap-2 items-center border-t border-[#2d3748] pt-3"><div className="text-sm text-cyan-300 min-w-0">{itemLabel(id)}</div>{selector}<span className="text-xs text-slate-400 col-span-2">{input.externalSupplies.some(s => s.itemId === id) ? '指定外部供应（生产链截断）' : '外部供应（默认）'}</span></div>;
         const settings = input.recipeSettings[recipe.id] || {};
         const facilities = DSP_FACILITIES.filter(f => isFacilityCompatible(recipe, f));
         const selectedFacility = facilities.find(f => f.id === settings.facilityId) || facilities[0];
         const tier = settings.proliferatorTier || 0;
         const speedAllowed = getRecipeMultipliers(recipe, 3, 'speed').speed > 1;
         const outputAllowed = getRecipeMultipliers(recipe, 3, 'output').output > 1;
-        return <div key={id} className="grid sm:grid-cols-5 gap-2 items-center border-t border-[#2d3748] pt-3">
-          <div className="text-sm text-cyan-300 min-w-0">{itemLabel(id)}</div>
-          {selector}
-          <div className="flex items-center gap-2 min-w-0">{selectedFacility && <DSPFacilityIcon facility={selectedFacility} size={24} />}<select aria-label={`建筑 ${recipe.id}`} className={`${field} flex-1 w-full`} value={settings.facilityId || facilities[0]?.id || ''} onChange={e => setRecipeSettings(recipe.id, { facilityId: e.target.value })}>{facilities.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
-          <select aria-label={`增产等级 ${recipe.id}`} className={field} value={tier} onChange={e => setRecipeSettings(recipe.id, { proliferatorTier: Number(e.target.value) as 0 | 1 | 2 | 3 })}>{[0, 1, 2, 3].map(t => <option key={t} value={t}>{t ? `增产剂 Mk.${t}` : '无喷涂'}</option>)}</select>
-          <select aria-label={`增产模式 ${recipe.id}`} className={field} value={settings.proliferatorMode || 'none'} onChange={e => setRecipeSettings(recipe.id, { proliferatorMode: e.target.value as 'none' | 'speed' | 'output' })}><option value="none">不启用</option><option value="speed" disabled={!speedAllowed}>加速{!speedAllowed ? '（不支持）' : ''}</option><option value="output" disabled={!outputAllowed}>额外产物{!outputAllowed ? '（不支持）' : ''}</option></select>
-        </div>;
+        return <article key={id} className="recipe-slot" aria-label={`${itemName(id)}配置`}>
+          <div className="recipe-slot-heading"><div className="text-sm font-bold min-w-0">{itemLabel(id)}</div>{selector}</div>
+          <div className="facility-slot"><div className="flex items-center gap-2 text-xs font-semibold">{selectedFacility && <DSPFacilityIcon facility={selectedFacility} size={24} />}<span className="facility-name">{selectedFacility?.name}</span></div>
+            <div role="group" aria-label={`建筑 ${recipe.id}`} className="slot-segments">{facilities.map(f=><button key={f.id} type="button" aria-label={`建筑 ${recipe.id} ${f.name}`} title={f.name} aria-pressed={selectedFacility?.id===f.id} onClick={()=>setRecipeSettings(recipe.id,{facilityId:f.id})}>{f.name.match(/Mk\.[IVX]+/)?.[0] || f.name.replace(/\s*\([^)]*\)/g,'')}</button>)}</div>
+          </div>
+          <div className="spray-slot"><span className="slot-caption">喷涂等级</span><div role="group" aria-label={`增产等级 ${recipe.id}`} className="slot-segments">{([0,1,2,3] as const).map(t=><button key={t} type="button" aria-label={`增产等级 ${recipe.id} ${t}`} aria-pressed={tier===t} onClick={()=>setRecipeSettings(recipe.id,{proliferatorTier:t})}>{t?`Mk.${['','I','II','III'][t]}`:'无喷涂'}</button>)}</div></div>
+          {tier>0&&<div className="spray-slot"><span className="slot-caption">喷涂效果</span><div role="group" aria-label={`增产模式 ${recipe.id}`} className="slot-segments">{([['none','不启用',true],['speed','加速',speedAllowed],['output','额外产物',outputAllowed]] as const).map(([mode,label,allowed])=><button key={mode} type="button" disabled={!allowed} title={allowed?label:'当前配方不支持'} aria-pressed={(settings.proliferatorMode||'none')===mode} onClick={()=>setRecipeSettings(recipe.id,{proliferatorMode:mode})}>{label}</button>)}</div></div>}
+        </article>;
       })}
       <div className="flex flex-wrap gap-3 items-center text-xs"><span>物流估算：</span><DSPBeltIcon tier={input.beltTier} size={24} /><select aria-label="生产传送带" className={field} value={input.beltTier} onChange={e => update({ beltTier: Number(e.target.value) as 1 | 2 | 3 })}>{DSP_BELTS.map(b => <option key={b.tier} value={b.tier}>{b.name}</option>)}</select><label>堆叠 <select aria-label="生产堆叠层数" className={field} value={input.beltStackLayers} onChange={e => update({ beltStackLayers: Number(e.target.value) })}>{[1, 2, 3, 4].map(n => <option key={n}>{n}</option>)}</select></label></div>
-    </section>
+    </details>
+    </div>
+    <div data-production-result className={`min-w-0 space-y-4 lg:sticky lg:top-24 ${mobileSection==='config'?'hidden lg:block':''}`}>
+    <div className="flex items-center justify-between"><h2 className="text-lg font-bold text-white">生产工作台</h2><span className="pixel-label">LIVE RESULTS</span></div>
+    <div className="readout-strip" aria-label="生产概览">{[
+      {label:'部署设备',value:format(result.totalMachines),unit:'台',code:'UNIT_CNT',Icon:Factory},
+      {label:'生产功耗',value:format(result.totalPowerMW),unit:'MW',code:'PWR_LOAD',Icon:Zap},
+      {label:'物流容量',value:format(beltCapacity),unit:'/min',code:'BELT_CAP',Icon:Layers},
+    ].map(({label,value,unit,code,Icon})=><div key={code} className="readout-cell"><div className="readout-label"><Icon size={15} aria-hidden="true"/><span>{label}</span><span className="readout-code" aria-hidden="true">{code}</span></div><div className="readout-value">{value}<span className="readout-unit">{unit}</span></div></div>)}</div>
     {result.status !== 'ok' && <div role="alert" className="bg-[#220d18] border-2 border-[#ff0055] rounded-xl p-4 text-rose-300">生产链计算失败：{result.error || result.status}</div>}
     <div className="flex gap-2"><button type="button" className={button} aria-pressed={view === 'schematic'} onClick={() => onViewChange('schematic')}>生产链 2D</button><button type="button" className={button} aria-pressed={view === 'metrics'} onClick={() => onViewChange('metrics')}>量化结果</button></div>
     <div data-testid="production-schematic" hidden={view !== 'schematic'}><ProductionFlowView result={result} onCopyToMixed={onCopyToMixed} /></div>
@@ -101,6 +118,8 @@ export function ProductionWorkspace({ input, onChange, view, onViewChange, onCop
         {result.steps.map(step => <article key={step.recipe.id} className="border-t border-[#2d3748] pt-3 space-y-2 text-sm"><div className="flex flex-wrap justify-between gap-2"><div className="text-cyan-300 font-bold flex items-center gap-2"><DSPItemIcon item={items[step.outputs[0]?.itemId]} size={28} />{step.recipe.name}</div><button type="button" className={button} onClick={() => onCopyToMixed(step)}>复制此步骤到混带</button></div><div className="flex flex-wrap items-center gap-2"><DSPFacilityIcon facility={step.facility} size={24} />{step.facility.name} · 理论 {format(step.machines)} 台 / 部署 {step.machinesRounded} 台 · {format(step.powerMW)} MW</div><div className="grid sm:grid-cols-2 gap-2">{[['输入', step.inputs], ['输出', step.outputs]].map(([label, rates]) => <div key={label as string} className="text-xs"><span className="text-slate-400">{label as string}</span>{(rates as ProductionStep['inputs']).map(rate => <div key={rate.itemId} className="flex items-center justify-between gap-2 py-1">{itemLabel(rate.itemId)}<span className="font-mono">{format(rate.ratePerMinute)} /min · {format(rate.ratePerMinute / beltCapacity)} 带</span></div>)}</div>)}</div></article>)}
       </section>
       <div className="grid sm:grid-cols-2 gap-4">{[['外部供应', result.supplies], ['副产物 / 余量', result.surplus]].map(([title, rates]) => <section key={title as string} className={panel}><h3 className="text-cyan-300 text-sm">{title as string}</h3>{!(rates as ProductionStep['inputs']).length && <p className="text-slate-500 text-xs">无</p>}{(rates as ProductionStep['inputs']).map(rate => <div key={rate.itemId} className="flex items-center justify-between gap-2 text-sm">{itemLabel(rate.itemId)}<span className="font-mono">{format(rate.ratePerMinute)} /min</span></div>)}</section>)}</div>
+    </div>
+    </div>
     </div>
   </div>;
 }

@@ -186,7 +186,12 @@ interface SchematicViewProps {
 
 export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result }) => {
   const DSP_ITEMS = useDSPItems();
-  const [zoom, setZoom] = useState(1);
+  const [viewport, setViewport] = useState({zoom:1,x:16,y:16});
+  const zoom = viewport.zoom;
+  const setZoom = (value: React.SetStateAction<number>) => setViewport(previous => ({...previous,zoom:typeof value==='function'?value(previous.zoom):value}));
+  const [cardPositions, setCardPositions] = useState<Record<number, {x:number;y:number}>>({});
+  const cardDrag = useRef<{index:number;x:number;y:number;originX:number;originY:number;moved:boolean}|null>(null);
+  const suppressClick = useRef(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [selectedFacilityIndex, setSelectedFacilityIndex] = useState<number | null>(0);
   const [showFlowLabels, setShowFlowLabels] = useState(true);
@@ -259,8 +264,8 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
   const displayFacilityCount = Math.min(10, actualFacilitiesCount);
   const startX = inletWidth + 30;
   const totalContentWidth = startX + displayFacilityCount * (facilityWidth + facilityGap) + outletLoopWidth;
-  const svgWidth = Math.max(900, totalContentWidth + 60);
-  const svgHeight = loopbackY + 65; // 365 + 65 = 430 (预留底部标签与安全呼吸空间)
+  const svgWidth = Math.max(900, totalContentWidth + 60, ...Object.values(cardPositions).map(position => position.x + 140));
+  const svgHeight = Math.max(loopbackY + 65, ...Object.values(cardPositions).map(position => position.y + 120)); // 365 + 65 = 430 (预留底部标签与安全呼吸空间)
 
   // 自动缩放功能：根据当前视口宽高自动计算最优缩放比，完整呈现全貌
   const handleAutoFit = () => {
@@ -275,11 +280,9 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
     const scaleX = containerWidth / svgWidth;
     const scaleY = containerHeight / svgHeight;
     const fitRatio = Math.min(scaleX, scaleY);
-    const targetZoom = Math.min(1.5, Math.max(0.35, Math.round(fitRatio * 100) / 100));
+    const targetZoom = Math.min(1.5, Math.max(0.1, Math.round(fitRatio * 100) / 100));
 
-    setZoom(targetZoom);
-    container.scrollLeft = 0;
-    container.scrollTop = 0;
+    setViewport({zoom:targetZoom,x:(container.clientWidth-svgWidth*targetZoom)/2,y:(container.clientHeight-svgHeight*targetZoom)/2});
   };
 
   // 鼠标滚轮缩放功能：监听画布区域原生 wheel 事件，平滑放大缩小
@@ -289,10 +292,13 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-      setZoom(prev => {
-        const next = Math.round(prev * zoomFactor * 100) / 100;
-        return Math.min(2.5, Math.max(0.35, next));
+      const bounds = container.getBoundingClientRect();
+      const x = e.clientX - bounds.left;
+      const y = e.clientY - bounds.top;
+      setViewport(previous => {
+        const next = Math.min(2.5, Math.max(0.1, previous.zoom * Math.exp(-e.deltaY * 0.0015)));
+        const ratio = next / previous.zoom;
+        return {zoom:next,x:x-(x-previous.x)*ratio,y:y-(y-previous.y)*ratio};
       });
     };
 
@@ -300,13 +306,13 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
     return () => {
       container.removeEventListener('wheel', onWheel);
     };
-  }, [svgWidth, svgHeight]);
+  }, [svgWidth, svgHeight, zoom]);
 
   // 鼠标拖拽平移功能 (Drag to Pan)
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('a')) return;
+    if (target.closest('button') || target.closest('a') || target.closest('[data-mixed-card]')) return;
 
     const container = containerRef.current;
     if (!container) return;
@@ -315,8 +321,8 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
     dragStartRef.current = {
       x: e.clientX,
       y: e.clientY,
-      scrollLeft: container.scrollLeft,
-      scrollTop: container.scrollTop,
+      scrollLeft: viewport.x,
+      scrollTop: viewport.y,
     };
   };
 
@@ -327,8 +333,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
 
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
-    container.scrollLeft = dragStartRef.current.scrollLeft - dx;
-    container.scrollTop = dragStartRef.current.scrollTop - dy;
+    setViewport(previous=>({...previous,x:dragStartRef.current.scrollLeft+dx,y:dragStartRef.current.scrollTop+dy}));
   };
 
   const handleMouseUpOrLeave = () => {
@@ -456,6 +461,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
         </div>
       </div>
 
+      <div className="px-4 py-1.5 bg-[#0e121c] border-b border-slate-800 text-[10px] text-slate-400 flex items-center justify-between"><span>滚轮以鼠标为中心缩放 · 拖动卡片调整布局 · 空白处平移 · 卡片移动不改变实际抓距计算</span><button type="button" className="text-cyan-300 border border-cyan-800 rounded px-2 py-1 shrink-0" onClick={()=>{setCardPositions({});setActivePopup(null);}}>重置卡片布局</button></div>
       {/* SVG Canvas Stage Viewport - 独立非滚动视口外层，确保底部控制栏永远在底部吸附，绝不随缩放或平移乱跑 */}
       <div className="relative w-full overflow-hidden border-b border-slate-800/80">
         <div 
@@ -471,7 +477,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
               setActivePopup(null);
             }
           }}
-          className={`w-full overflow-x-auto overflow-y-auto bg-[#07090e] p-3 sm:p-4 select-none bg-dsp-grid flex items-center justify-start transition-all duration-200 ${
+          className={`w-full overflow-hidden bg-[#07090e] select-none bg-dsp-grid relative ${
             isDragging ? 'cursor-grabbing' : 'cursor-grab'
           } ${
             canvasHeightMode === 'compact'
@@ -485,12 +491,12 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
         >
         <div 
           style={{ 
-            width: svgWidth, 
-            height: svgHeight, 
-            transform: `scale(${zoom})`, 
+            width: svgWidth,
+            height: svgHeight,
+            transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${zoom})`,
             transformOrigin: 'top left' 
           }}
-          className="relative transition-transform duration-150 ease-out shrink-0 my-auto"
+          className="absolute left-0 top-0"
         >
           <svg
             width={svgWidth}
@@ -842,7 +848,9 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
             {/* 3. PRODUCTION FACILITY ARRAY & SORTERS */}
             {/* ============================================================== */}
             {Array.from({ length: displayFacilityCount }).map((_, i) => {
-              const facX = startX + i * (facilityWidth + facilityGap);
+              const originalX = startX + i * (facilityWidth + facilityGap);
+              const facX = cardPositions[i]?.x ?? originalX;
+              const cardY = cardPositions[i]?.y ?? facilityY;
               const isSelected = selectedFacilityIndex === i;
 
               return (
@@ -856,7 +864,8 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
                     const offset = (matIdx - (materials.length - 1) / 2) * 18;
                     const sorterX = facX + facilityWidth / 2 + offset;
                     const startY = mainBeltY - 8;
-                    const endY = facilityY + facilityHeight;
+                    const beltX = originalX + facilityWidth / 2 + offset;
+                    const endY = cardY + facilityHeight;
 
                     const sorterColor = mat.recommendedSorter.hexColor;
                     const midY = (startY + endY) / 2;
@@ -891,7 +900,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
                       >
                         {/* Generous hit area for clicking sorter line */}
                         <line
-                          x1={sorterX}
+                          x1={beltX}
                           y1={startY}
                           x2={sorterX}
                           y2={endY + 2}
@@ -900,7 +909,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
                         />
                         {/* Sorter Arm Guide / Beam Line */}
                         <line
-                          x1={sorterX}
+                          x1={beltX}
                           y1={startY}
                           x2={sorterX}
                           y2={endY + 2}
@@ -915,7 +924,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
                           fill={isSorterActive ? '#ffffff' : sorterColor}
                         />
                         {/* Sorter Joint Pivot Base on Belt */}
-                        <circle cx={sorterX} cy={startY} r="3" fill="#07090e" stroke={sorterColor} strokeWidth="1.8" />
+                        <circle cx={beltX} cy={startY} r="3" fill="#07090e" stroke={sorterColor} strokeWidth="1.8" />
 
                         {/* Sorter Distance Badge */}
                         {showFlowLabels && (i === 0 || isSelected) && (
@@ -948,8 +957,16 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
                   })}
 
                   {/* Facility Building Card */}
-                  <g transform={`translate(${facX}, ${facilityY})`}>
-                    <rect
+                  <g data-mixed-card={i} data-reference-machine={i===0} data-selected-machine={isSelected} data-overloaded-machine={isBeltOverloaded && i >= maxFacilitiesLimit} transform={`translate(${facX}, ${cardY})`} className="cursor-grab active:cursor-grabbing"
+                    onPointerDown={event => { if(event.button!==0)return; if((event.target as Element).closest('.canvas-interactive-item')){event.stopPropagation();return;} event.stopPropagation(); cardDrag.current={index:i,x:event.clientX,y:event.clientY,originX:facX,originY:cardY,moved:false}; suppressClick.current=false; event.currentTarget.setPointerCapture(event.pointerId); setSelectedFacilityIndex(i); }}
+                    onPointerMove={event => { const drag=cardDrag.current;if(!drag || drag.index!==i)return;const dx=event.clientX-drag.x;const dy=event.clientY-drag.y;if(Math.hypot(dx,dy)<3 && !drag.moved)return;drag.moved=true;suppressClick.current=true;setActivePopup(null);setCardPositions(previous=>({...previous,[i]:{x:Math.max(0,drag.originX+dx/zoom),y:Math.max(0,drag.originY+dy/zoom)}})); }}
+                    onPointerUp={() => {cardDrag.current=null;}}
+                    onPointerCancel={() => {cardDrag.current=null;}}
+                    onLostPointerCapture={() => {cardDrag.current=null;}}
+                    onClickCapture={event=>{if(suppressClick.current){event.stopPropagation();suppressClick.current=false;}}}
+                    onDragStart={event=>event.preventDefault()}>
+                    <title>拖动调整卡片位置（仅布局示意）</title>
+                    <rect className="machine-body"
                       x="0"
                       y="0"
                       width={facilityWidth}
@@ -968,14 +985,15 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
                     />
 
                     {/* Facility Number Header */}
-                    <rect x="0" y="0" width={facilityWidth} height="18" rx="6" fill="#1e293b" opacity="0.6" />
-                    <text x="8" y="12" fill="#94a3b8" fontSize="9" fontWeight="bold" fontFamily="monospace">
+                    <rect className="machine-header" x="0" y="0" width={facilityWidth} height="18" rx="6" fill="#1e293b" opacity="0.6" />
+                    <text className="machine-header-label" x="8" y="12" fill="#94a3b8" fontSize="9" fontWeight="bold" fontFamily="monospace">
                       #{i + 1}
                     </text>
-                    <text x={facilityWidth - 8} y="12" fill="#38bdf8" fontSize="9" textAnchor="end" fontWeight="bold">
+                    <text className="machine-header-label" x={facilityWidth - 8} y="12" fill="#38bdf8" fontSize="9" textAnchor="end" fontWeight="bold">
                       {facility.speedMultiplier}x
                     </text>
 
+                    {i===0&&<circle className="machine-reference-light" cx={facilityWidth/2} cy="9" r="2.5" fill="#FF5722"><title>首台基准机器</title></circle>}
                     {/* Facility Building & Recipe Output Icons (点击显示详情) */}
                     <foreignObject
                       x={8}
@@ -1001,7 +1019,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
                               tagColor: facility.color || '#38bdf8',
                               iconSrc: `${normalizedBase}dsp_icons/${facility.iconName || 'assembler-1'}.png`,
                               anchorX: facX + 22,
-                              anchorY: facilityY + facilityHeight + 8,
+                              anchorY: cardY + facilityHeight + 8,
                               anchorPlacement: 'bottom',
                               stats: [
                                 { label: '生产倍率', value: `${facility.speedMultiplier}x` },
@@ -1041,7 +1059,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
                                 iconSrc: iconUrl,
                                 iconSymbol: targetItem.iconSymbol,
                                 anchorX: facX + facilityWidth - 22,
-                                anchorY: facilityY + facilityHeight + 8,
+                                anchorY: cardY + facilityHeight + 8,
                                 anchorPlacement: 'bottom',
                                 stats: [
                                   { label: '单台理论产量', value: `${(result.outputs[0]?.ratePerFacility ?? 0).toFixed(2)} /s` },
