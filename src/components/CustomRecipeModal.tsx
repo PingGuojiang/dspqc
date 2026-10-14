@@ -1,3 +1,4 @@
+import { useDSPItems } from '../data/GameDataContext';
 import React, { useState } from 'react';
 import { X, Plus, Trash2, CheckCircle2 } from 'lucide-react';
 import { DSP_ITEMS, DSPRecipe } from '../data/dspData';
@@ -10,6 +11,7 @@ interface CustomRecipeModalProps {
 }
 
 export const CustomRecipeModal: React.FC<CustomRecipeModalProps> = ({ isOpen, onClose, onSaveRecipe }) => {
+  const DSP_ITEMS = useDSPItems();
   const [name, setName] = useState('');
   const [craftTime, setCraftTime] = useState<number>(3.0);
   const [facilityCategory, setFacilityCategory] = useState<'assembler' | 'smelter' | 'chemical' | 'refinery' | 'lab'>('assembler');
@@ -32,7 +34,7 @@ export const CustomRecipeModal: React.FC<CustomRecipeModalProps> = ({ isOpen, on
       }
     }
     return Array.from(map.values()).sort((a, b) => (a.numericId || 0) - (b.numericId || 0));
-  }, []);
+  }, [DSP_ITEMS]);
 
   if (!isOpen) return null;
 
@@ -46,7 +48,7 @@ export const CustomRecipeModal: React.FC<CustomRecipeModalProps> = ({ isOpen, on
   };
 
   const handleInputChange = (index: number, field: 'itemId' | 'count', value: string | number) => {
-    const updated = [...inputs];
+    const updated = inputs.map(input => ({ ...input }));
     if (field === 'itemId') {
       updated[index].itemId = value as string;
     } else {

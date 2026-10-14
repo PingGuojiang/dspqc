@@ -1,3 +1,4 @@
+import { useDSPItems } from '../data/GameDataContext';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Play, 
@@ -54,7 +55,7 @@ export const FacilityIconRenderer: React.FC<{
     setIsLoaded(false);
   }, [facility.id, facility.numericId, facility.iconName]);
 
-  const basePath = import.meta.env.BASE_URL || '/';
+  const basePath = (import.meta.env?.BASE_URL ?? '/') || '/';
   const cleanBase = basePath.endsWith('/') ? basePath : `${basePath}/`;
   
   // Prefer facility.iconName (e.g., 'assembler-1', 'smelter'), fallback to numericId or id
@@ -184,6 +185,7 @@ interface SchematicViewProps {
 }
 
 export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result }) => {
+  const DSP_ITEMS = useDSPItems();
   const [zoom, setZoom] = useState(1);
   const [isPlaying, setIsPlaying] = useState(true);
   const [selectedFacilityIndex, setSelectedFacilityIndex] = useState<number | null>(0);
@@ -345,7 +347,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
             2D 进料排布与闭环回流简图 (Schematic Canvas)
           </h2>
           <span className="text-xs text-slate-400 hidden sm:inline font-mono">
-            · 1:1 指导游戏铺设
+            · 示意布局 · 实际运行需验证
           </span>
         </div>
 
@@ -498,10 +500,6 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
           >
             <defs>
               {/* Conveyor Belt Pattern / Grid Markers */}
-              <pattern id="pixelGrid" width="16" height="16" patternUnits="userSpaceOnUse">
-                <rect width="16" height="16" fill="none" />
-                <path d="M 16 0 L 0 0 0 16" fill="none" stroke="rgba(30, 41, 59, 0.4)" strokeWidth="0.5" />
-              </pattern>
 
               {/* Belt Roller Texture */}
               <pattern id="beltRollers" width="8" height="14" patternUnits="userSpaceOnUse">
@@ -526,8 +524,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
               </filter>
             </defs>
 
-            {/* Background fine grid */}
-            <rect width={svgWidth} height={svgHeight} fill="url(#pixelGrid)" />
+            {/* The viewport owns the grid; a second scaled SVG grid causes moire while dragging. */}
 
             {/* ============================================================== */}
             {/* 1. INFLOW ZONE (BUFFER CHEST + SPLITTER MERGING) */}
@@ -575,7 +572,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
                     stats: [
                       { label: '防死锁推荐缓冲', value: `${bufferStorage.recommendedItems} items` },
                       { label: '推荐仓储箱数', value: `${bufferStorage.recommendedChests} 个` },
-                      { label: '残料回流速率', value: `${bufferStorage.residualReturnRate} /s` },
+                      { label: '入口未占用运力', value: `${bufferStorage.residualReturnRate} /s` },
                       { label: '接入位置', value: '合流四向分流器输入端' },
                     ],
                     description: '闭环混流的核心缓冲机构，吸收回流余料并在供料不足时自动吐出，保持回路动平衡。',
@@ -631,7 +628,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
                       { label: '端口配置', value: '下端回流输入 / 左端新料 / 右端主带' },
                       { label: '防死锁机制', value: '优先合流避免积压循环' },
                     ],
-                    description: '四向分流器将回流传送带与新原料混合。通过将回流设置为高优先级，避免传送带死锁。',
+                    description: '四向分流器将回流传送带与新原料混合。回流优先可减少积压风险，还需控制新料输入和输出背压。',
                   });
                 }}
               >
@@ -1047,9 +1044,9 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
                                 anchorY: facilityY + facilityHeight + 8,
                                 anchorPlacement: 'bottom',
                                 stats: [
-                                  { label: '单台理论产量', value: `${((recipe.outputs[0]?.count || 1) / recipe.craftTime * facility.speedMultiplier).toFixed(2)} /s` },
+                                  { label: '单台理论产量', value: `${(result.outputs[0]?.ratePerFacility ?? 0).toFixed(2)} /s` },
                                   { label: '配方基础耗时', value: `${recipe.craftTime} 秒` },
-                                  { label: '整线理论总产量', value: `${((recipe.outputs[0]?.count || 1) / recipe.craftTime * facility.speedMultiplier * actualFacilitiesCount).toFixed(2)} /s` },
+                                  { label: '整线理论总产量', value: `${((result.outputs[0]?.ratePerMinute ?? 0) / 60).toFixed(2)} /s` },
                                   { label: '输出方式', value: '独立输出带送出' },
                                 ],
                                 description: `设施生产的最终产物。通常由背面或侧面的专用输出传送带输出至主线或仓储。`,
@@ -1157,7 +1154,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
                       e.stopPropagation();
                       handleTogglePopup({
                         id: 'loopback_badge',
-                        title: '闭环回流防死锁线',
+                        title: '闭环回流示意线',
                         subtitle: '末端至始端闭环回流传送带',
                         category: '混流核心',
                         tagColor: '#f59e0b',
@@ -1170,7 +1167,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
                           { label: '优先合流', value: '回流料享有优先权，空位补新料' },
                           { label: '垂直间距', value: '200px 保持开阔整洁' },
                         ],
-                        description: '戴森球计划混流配方的灵魂设计！杜绝单种原料堆积堵塞传送带，保障无限平稳运转。',
+                        description: '回流与缓冲有助于消化暂时余料，但不能修复长期配比失衡；需要验证回流优先级、补料控制和产物输出。',
                       });
                     }}
                   >
@@ -1393,7 +1390,7 @@ export const SchematicView: React.FC<SchematicViewProps> = ({ inputState, result
             </div>
             <span className="text-cyan-400 font-semibold">{facility.name} #{selectedFacilityIndex + 1}:</span>
             <span className="text-slate-300">
-              单台进料 {result.feedRatePerFacilityTotal} /s
+              单台进料 {Number(result.feedRatePerFacilityTotal.toFixed(3))} /s
             </span>
             <span className="text-slate-500">|</span>
             <span className="text-slate-300">

@@ -1,9 +1,9 @@
 /**
  * DSP Mixed Belt Physics & Calculation Engine
- * Strict implementation of DSP game formulas, Wiki decay tables, and PRD specifications.
+ * Steady-state material calculation with explicit, simplified logistics assumptions.
  */
 
-import { DSPRecipe, DSPFacility, DSPBelt, DSPSorter, DSP_SORTERS, DSP_BELTS, PROLIFERATOR_CONFIGS, DSP_ITEMS } from '../data/dspData';
+import { DSPRecipe, DSPFacility, DSPBelt, DSPSorter, DSP_SORTERS, DSP_BELTS, DSP_ITEMS, DSP_FACILITIES, DSPItem, isFacilityCompatible, getRecipeMultipliers } from '../data/dspData';
 
 export type ProliferatorMode = 'output' | 'speed' | 'none';
 
@@ -13,7 +13,7 @@ export interface CalculationInput {
   belt: DSPBelt;
   beltStackLayers: number; // 1 to 4
   sorterStackTechLevel: number; // 1 to 8 (capacity per grab for White Sorter)
-  isTechLocked: boolean; // if true & no white sorter manual stack, throughput / 4
+  isTechLocked: boolean; // legacy flag: white sorter simplified grab capacity limited to one
   proliferatorTier: 0 | 1 | 2 | 3;
   proliferatorMode: ProliferatorMode;
   redundancyPercent: number; // e.g. 110 for 110%
@@ -56,10 +56,13 @@ export interface CapacityCheckAlert {
 }
 
 export interface CalculationResult {
+  theoreticalMaxFacilities: number;
+  cargoRatePerFacilityTotal: number;
+  outputs: {itemId:string;ratePerFacility:number;ratePerMinute:number;sorterThroughput:number;isBottleneck:boolean;isBeltOverloaded:boolean}[];
   beltCapacity: number; // items / sec
   totalRawPerCraft: number; // sum of raw materials in 1 craft cycle
   feedRatePerFacilityTotal: number; // total raw items / sec per facility
-  maxFacilitiesLimit: number; // Theoretical max facilities on full belt
+  maxFacilitiesLimit: number; // recommended input bandwidth limit with reserve
   actualFacilitiesCount: number; // Configured or recommended facility count
   totalFeedRateDemand: number; // actual total items / sec required
   beltLoadPercentage: number; // e.g. 85.5%
@@ -76,7 +79,7 @@ export interface CalculationResult {
   bufferStorage: {
     recommendedItems: number;
     recommendedChests: number;
-    residualReturnRate: number; // items/sec returning to inlet
+    residualReturnRate: number; // available input bandwidth; not measured return flow
   };
   warnings: string[];
   capacityAlert?: CapacityCheckAlert;
@@ -183,10 +186,7 @@ export function getSorterThroughput(
 
   if (sorter.tier === 4) {
     stack = sorterStackCapacity;
-    if (isTechLocked) {
-      // Tech locked condition: without stack technology, instant throughput drops / 4
-      stack = Math.max(1, stack * 0.25);
-    }
+    stack = isTechLocked ? 1 : Math.max(1, Math.min(8, sorterStackCapacity));
   }
 
   return (sorter.baseTripsPerSec * stack) / distance;
@@ -194,21 +194,40 @@ export function getSorterThroughput(
 
 /**
  * Bresenham-style even interleaving algorithm for mixed-belt items.
- * Guarantees smooth distribution so facilities receive all ingredients without clustering.
+ * Produces an illustrative ratio, without guaranteeing local availability.
  */
+export function normalizeRecipeInputs(inputs: {itemId:string;count:number}[]): {inputs:{itemId:string;count:number}[];divisor:number} {
+  if (!Array.isArray(inputs) || !inputs.length) throw new Error('序列需要物料');
+  const scale = 1_000_000;
+  const merged = new Map<string,number>();
+  for (const item of inputs) {
+    if (!item || typeof item.itemId !== 'string' || !item.itemId.trim() || !Number.isFinite(item.count) || item.count <= 0) throw new Error('无效序列物料');
+    const scaled = item.count * scale;
+    const integer = Math.round(scaled);
+    if (!Number.isSafeInteger(integer) || integer <= 0 || Math.abs(scaled - integer) > Math.max(1e-8,Math.abs(scaled)*Number.EPSILON*4)) throw new Error('物料数量精度最多六位小数');
+    const sum = (merged.get(item.itemId) || 0) + integer;
+    if (!Number.isSafeInteger(sum)) throw new Error('物料数量超出精度范围');
+    merged.set(item.itemId,sum);
+  }
+  const gcd = (a:number,b:number):number => b === 0 ? a : gcd(b,a % b);
+  const values = [...merged.values()];
+  const divisor = values.reduce((a,b)=>gcd(a,b));
+  const normalized = [...merged].map(([itemId,count])=>({itemId,count:count/divisor}));
+  if (normalized.reduce((sum,i)=>sum+i.count,0) > 10000) throw new Error('混带比例周期过长');
+  return {inputs:normalized,divisor:divisor/scale};
+}
+
+export function supportsMixedRecipe(recipe: DSPRecipe): boolean {
+  try {
+    if (!recipe || recipe.facilityCategory === 'special' || !Number.isFinite(recipe.craftTime) || recipe.craftTime <= 0 || !Array.isArray(recipe.outputs) || !recipe.outputs.length || recipe.outputs.some(i=>!i || typeof i.itemId !== 'string' || !i.itemId.trim() || !Number.isFinite(i.count) || i.count <= 0) || !DSP_FACILITIES.some(f=>isFacilityCompatible(recipe,f))) return false;
+    normalizeRecipeInputs(recipe.inputs);
+    return true;
+  } catch { return false; }
+}
+
 export function generateInterleavedPattern(inputs: { itemId: string; count: number }[]): string[] {
   if (!inputs.length) return [];
-  const totalItems = inputs.reduce((sum, item) => sum + item.count, 0);
-  if (totalItems === 0) return [];
-  if (totalItems > 64) {
-    // For very high counts, normalize by GCD
-    const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
-    const divisor = inputs.reduce((acc, curr) => gcd(acc, curr.count), inputs[0].count);
-    if (divisor > 1) {
-      inputs = inputs.map(i => ({ ...i, count: i.count / divisor }));
-    }
-  }
-
+  inputs = normalizeRecipeInputs(inputs).inputs;
   const normalizedTotal = inputs.reduce((sum, item) => sum + item.count, 0);
   const pattern: string[] = [];
   const accumulators = inputs.map(() => 0);
@@ -235,7 +254,7 @@ export function generateInterleavedPattern(inputs: { itemId: string; count: numb
 /**
  * Main Calculator Engine implementing PRD 2.2 and the reviewed DSP formulas.
  */
-export function calculateDSPMixedBelt(input: CalculationInput): CalculationResult {
+export function calculateDSPMixedBelt(input: CalculationInput, items: Record<string,DSPItem> = DSP_ITEMS): CalculationResult {
   const {
     recipe,
     facility,
@@ -250,21 +269,15 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
     preferredSorterDistance = 1,
   } = input;
 
-  const proliferator = PROLIFERATOR_CONFIGS[proliferatorTier] || PROLIFERATOR_CONFIGS[0];
   const warnings: string[] = [];
 
-  // 1. Proliferator Multipliers
-  let speedBonus = 0;
-  let outputBonus = 0;
-
-  if (proliferatorTier > 0) {
-    if (proliferatorMode === 'speed') {
-      speedBonus = proliferator.extraSpeedBonus;
-    } else if (proliferatorMode === 'output') {
-      outputBonus = proliferator.extraOutputBonus;
-    }
-  }
-
+  if (!isFacilityCompatible(recipe,facility)) throw new Error('配方与建筑不兼容');
+  if (!supportsMixedRecipe(recipe)) throw new Error('无效生产配方');
+  if (!Number.isInteger(beltStackLayers) || beltStackLayers < 1 || beltStackLayers > 4 || !Number.isFinite(belt.baseSpeed) || belt.baseSpeed <= 0 || !Number.isFinite(facility.speedMultiplier) || facility.speedMultiplier <= 0 || !Number.isFinite(redundancyPercent) || redundancyPercent < 100 || (customFacilityCount !== undefined && (!Number.isSafeInteger(customFacilityCount) || customFacilityCount < 0))) throw new Error('无效生产参数');
+  const multipliers = getRecipeMultipliers(recipe,proliferatorTier,proliferatorMode);
+  const speedBonus = multipliers.speed - 1;
+  const outputBonus = multipliers.output - 1;
+  warnings.push('物流为统一实际堆叠高度下的稳态估算；白爪吞吐、缓冲与回流需按版本和布局实测。');
   // Effective facility speed factor
   // In speed mode, facility speed increases by (1 + speedBonus)
   const effectiveFacilitySpeed = facility.speedMultiplier * (1 + speedBonus);
@@ -277,10 +290,8 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
   const totalRawPerCraft = recipe.inputs.reduce((sum, item) => sum + item.count, 0);
 
   // 4. Feed Rate per Facility (PRD formula)
-  // feed_rate = (total_raw_materials * facility_speed) / (production_time * stack_layers)
-  // Special condition: if isTechLocked, throughput has 0.25 multiplier (divide by 4)
-  const techDivisor = isTechLocked ? 4 : 1;
-  const feedRatePerFacilityTotal = (totalRawPerCraft * effectiveFacilitySpeed) / (recipe.craftTime * techDivisor);
+  // Item consumption is independent of cargo stacking and technology.
+  const feedRatePerFacilityTotal = (totalRawPerCraft * effectiveFacilitySpeed) / (recipe.craftTime);
 
   // 5. Max Facilities Calculation (PRD formula)
   // max_facilities = (belt_capacity * production_time) / (effectiveFacilitySpeed * total_raw_materials)
@@ -289,28 +300,30 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
   const effectiveBeltForLength = beltCapacity / safetyMultiplier;
 
   let maxFacilitiesLimit = Math.floor(
-    (effectiveBeltForLength * recipe.craftTime * techDivisor) / (effectiveFacilitySpeed * totalRawPerCraft)
+    (effectiveBeltForLength * recipe.craftTime) / (effectiveFacilitySpeed * totalRawPerCraft)
   );
-  if (maxFacilitiesLimit < 1) maxFacilitiesLimit = 1;
+  const theoreticalMaxFacilities = Math.floor(beltCapacity / feedRatePerFacilityTotal);
 
   // Determine actual facilities count
-  const actualFacilitiesCount = customFacilityCount !== undefined && customFacilityCount > 0
+  const actualFacilitiesCount = customFacilityCount !== undefined
     ? customFacilityCount
     : maxFacilitiesLimit;
 
   // Total Demand
   const totalFeedRateDemand = feedRatePerFacilityTotal * actualFacilitiesCount;
-  const beltLoadPercentage = Number(((totalFeedRateDemand / beltCapacity) * 100).toFixed(1));
+  const beltLoadPercentage = ((totalFeedRateDemand / beltCapacity) * 100);
   const isBeltOverloaded = totalFeedRateDemand > beltCapacity;
 
   if (isBeltOverloaded) {
-    warnings.push(`整线进料需求 (${totalFeedRateDemand.toFixed(1)} /s) 超过传送带最大运力 (${beltCapacity} /s)，将发生原料卡带与产线停滞！`);
+    warnings.push(`整线进料需求 (${totalFeedRateDemand.toFixed(1)} /s) 超过传送带最大运力 (${beltCapacity} /s)，无法维持所有设备满速运行。`);
   }
 
   // 6. Material Breakdown & Sorter Recommender
   const sortersList = DSP_SORTERS;
-  const materials: MaterialFeedSpec[] = recipe.inputs.map(inputItem => {
-    const itemData = DSP_ITEMS[inputItem.itemId] || {
+  const normalizedInputs = normalizeRecipeInputs(recipe.inputs);
+  const mergedInputs = [...new Set(recipe.inputs.map(i=>i.itemId))].map(itemId=>({itemId,count:recipe.inputs.filter(i=>i.itemId===itemId).reduce((sum,i)=>sum+i.count,0)}));
+  const materials: MaterialFeedSpec[] = mergedInputs.map(inputItem => {
+    const itemData = items[inputItem.itemId] || {
       id: inputItem.itemId,
       name: inputItem.itemId,
       category: 'component',
@@ -319,7 +332,7 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
     };
 
     // Consumption rate per facility for this material
-    const ratePerFacility = (inputItem.count * effectiveFacilitySpeed) / (recipe.craftTime * techDivisor);
+    const ratePerFacility = (inputItem.count * effectiveFacilitySpeed) / (recipe.craftTime);
     const totalRateAll = ratePerFacility * actualFacilitiesCount;
 
     // Sorter recommendation: find most suitable tier
@@ -373,11 +386,11 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
       itemColor: itemData.color,
       itemSymbol: itemData.iconSymbol,
       countPerCraft: inputItem.count,
-      feedRatePerFacility: Number(ratePerFacility.toFixed(2)),
-      totalFeedRateAllFacilities: Number(totalRateAll.toFixed(2)),
+      feedRatePerFacility: ratePerFacility,
+      totalFeedRateAllFacilities: totalRateAll,
       recommendedSorter,
       recommendedDistance: recommendedDist,
-      sorterThroughput: Number(chosenThroughput.toFixed(2)),
+      sorterThroughput: chosenThroughput,
       isBottleneck,
       bottleneckReason,
     };
@@ -386,13 +399,10 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
   // 7. Interleaved Material Sequence & Breakdown
   const interleavedPattern = generateInterleavedPattern(recipe.inputs);
   
-  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
-  const gcdDivisor = recipe.inputs.length > 0 
-    ? recipe.inputs.reduce((acc, curr) => gcd(acc, curr.count), recipe.inputs[0].count)
-    : 1;
+  const gcdDivisor = normalizedInputs.divisor;
 
   const beltSequenceSteps: BeltSequenceStep[] = interleavedPattern.map((itemId, idx) => {
-    const itemData = DSP_ITEMS[itemId] || { name: itemId, color: '#38bdf8', iconSymbol: itemId.slice(0, 2) };
+    const itemData = items[itemId] || { name: itemId, color: '#38bdf8', iconSymbol: itemId.slice(0, 2) };
     return {
       itemId,
       itemName: itemData.name,
@@ -402,10 +412,10 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
     };
   });
 
-  const itemBreakdown = recipe.inputs.map(inp => {
-    const itemData = DSP_ITEMS[inp.itemId] || { name: inp.itemId, color: '#38bdf8', iconSymbol: inp.itemId.slice(0, 2) };
-    const countInCycle = Math.round(inp.count / (gcdDivisor > 0 ? gcdDivisor : 1));
-    const ratioPercent = totalRawPerCraft > 0 ? Number(((inp.count / totalRawPerCraft) * 100).toFixed(1)) : 0;
+  const itemBreakdown = normalizedInputs.inputs.map(inp => {
+    const itemData = items[inp.itemId] || { name: inp.itemId, color: '#38bdf8', iconSymbol: inp.itemId.slice(0, 2) };
+    const countInCycle = inp.count;
+    const ratioPercent = (inp.count / interleavedPattern.length) * 100;
     return {
       itemId: inp.itemId,
       itemName: itemData.name,
@@ -425,10 +435,10 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
 
   // 8. Power Consumption & Grid Analysis
   const singleFacilityBasePowerMW = facility.powerMW;
-  const proliferatorPowerIncrease = proliferatorTier > 0 ? proliferator.powerConsumptionIncrease : 0;
+  const proliferatorPowerIncrease = multipliers.power - 1;
   const singleFacilityPowerMW = singleFacilityBasePowerMW * (1 + proliferatorPowerIncrease);
-  const facilityPowerMW = Number((singleFacilityPowerMW * actualFacilitiesCount).toFixed(3));
-  const baselineFacilityPowerMW = Number((singleFacilityBasePowerMW * actualFacilitiesCount).toFixed(3));
+  const facilityPowerMW = (singleFacilityPowerMW * actualFacilitiesCount);
+  const baselineFacilityPowerMW = (singleFacilityBasePowerMW * actualFacilitiesCount);
 
   // Sorters power calculation: each facility has 1 sorter per material input + 1 output sorter
   // Sorter work power and idle power
@@ -451,21 +461,26 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
     sorterBreakdownMap[s.name].powerKW += kwTotal;
   }
 
-  // Plus 1 output sorter per facility (defaulting to Mk.II or Mk.III based on facility speed)
-  const outputSorterName = facility.speedMultiplier >= 2 ? '分拣器 Mk.III' : '分拣器 Mk.II';
-  const outputSorterKW = facility.speedMultiplier >= 2 ? 72 : 36;
-  const outputSorterTotalKW = actualFacilitiesCount * outputSorterKW;
-  totalSorterPowerKW += outputSorterTotalKW;
-  totalSorterCount += actualFacilitiesCount;
+  const outputs = recipe.outputs.map(output => {
+    const ratePerFacility = output.count * effectiveFacilitySpeed / recipe.craftTime * multipliers.output;
+    const sorter = DSP_SORTERS.find(s=>getSorterThroughput(s,1,sorterStackTechLevel,isTechLocked) >= ratePerFacility) || DSP_SORTERS[3];
+    const throughput = getSorterThroughput(sorter,1,sorterStackTechLevel,isTechLocked);
+    const totalRate = ratePerFacility * actualFacilitiesCount;
+    const isBottleneck = throughput < ratePerFacility;
+    const isOutputBeltOverloaded = totalRate > beltCapacity;
+    if (isBottleneck || isOutputBeltOverloaded) warnings.push(`产物【${items[output.itemId]?.name || output.itemId}】输出能力不足；请检查独立输出爪与输出带。`);
+    const count = actualFacilitiesCount;
+    const powerKW = count * (sorter.workPowerKW || 36);
+    totalSorterCount += count;
+    totalSorterPowerKW += powerKW;
+    if (!sorterBreakdownMap[sorter.name]) sorterBreakdownMap[sorter.name] = {sorterName:sorter.name,count:0,powerKW:0};
+    sorterBreakdownMap[sorter.name].count += count;
+    sorterBreakdownMap[sorter.name].powerKW += powerKW;
+    return {itemId:output.itemId,ratePerFacility,ratePerMinute:totalRate*60,sorterThroughput:throughput,isBottleneck,isBeltOverloaded:isOutputBeltOverloaded};
+  });
 
-  if (!sorterBreakdownMap[outputSorterName]) {
-    sorterBreakdownMap[outputSorterName] = { sorterName: outputSorterName, count: 0, powerKW: 0 };
-  }
-  sorterBreakdownMap[outputSorterName].count += actualFacilitiesCount;
-  sorterBreakdownMap[outputSorterName].powerKW += outputSorterTotalKW;
-
-  const sortersPowerMW = Number((totalSorterPowerKW / 1000).toFixed(3));
-  const totalPowerMW = Number((facilityPowerMW + sortersPowerMW).toFixed(2));
+  const sortersPowerMW = (totalSorterPowerKW / 1000);
+  const totalPowerMW = (facilityPowerMW + sortersPowerMW);
   const totalPowerKW = Math.round(totalPowerMW * 1000);
 
   // Power Poles Estimation:
@@ -474,9 +489,9 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
   // Tesla tower: supply radius ~10m (diameter ~20m, covers ~6 assemblers linear).
   // Wireless tower: supply radius ~16m (diameter ~32m, covers ~10 assemblers linear).
   // Satellite substation: supply radius ~26.5m (covers ~18 assemblers or dual-sided 36 assemblers).
-  const teslaPoles = Math.max(1, Math.ceil(actualFacilitiesCount / 6));
-  const wirelessPoles = Math.max(1, Math.ceil(actualFacilitiesCount / 10));
-  const satellitePoles = Math.max(1, Math.ceil(actualFacilitiesCount / 24));
+  const teslaPoles = Math.ceil(actualFacilitiesCount / 6);
+  const wirelessPoles = Math.ceil(actualFacilitiesCount / 10);
+  const satellitePoles = Math.ceil(actualFacilitiesCount / 24);
 
   const recommendedPoles: PowerPoleRecommendation[] = [
     {
@@ -532,7 +547,7 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
       windTurbines: Math.ceil(totalPowerMW / 0.3),
       thermalPlants: Math.ceil(totalPowerMW / 2.16),
       miniFusionPlants: Math.ceil(totalPowerMW / 15.0),
-      artificialStars: Math.max(1, Math.ceil(totalPowerMW / 72.0)),
+      artificialStars: Math.ceil(totalPowerMW / 72.0),
     },
   };
 
@@ -544,24 +559,24 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
 
   // 10. Proliferator Baseline Comparison
   const baselineFeedRatePerFacility = (totalRawPerCraft / recipe.craftTime) * facility.speedMultiplier;
-  const baselineTotalFeedDemand = Number((baselineFeedRatePerFacility * actualFacilitiesCount).toFixed(2));
+  const baselineTotalFeedDemand = (baselineFeedRatePerFacility * actualFacilitiesCount);
   const baseOutputPerCraft = recipe.outputs[0]?.count || 1;
-  const baselineOutputPerMin = Number(((baseOutputPerCraft * (facility.speedMultiplier / recipe.craftTime) * 60) * actualFacilitiesCount).toFixed(1));
-  const currentOutputPerMin = Number((baselineOutputPerMin * (1 + (proliferatorMode === 'speed' ? speedBonus : proliferatorMode === 'output' ? outputBonus : 0))).toFixed(1));
+  const baselineOutputPerMin = ((baseOutputPerCraft * (facility.speedMultiplier / recipe.craftTime) * 60) * actualFacilitiesCount);
+  const currentOutputPerMin = (baselineOutputPerMin * (1 + (proliferatorMode === 'speed' ? speedBonus : proliferatorMode === 'output' ? outputBonus : 0)));
   const demandDeltaPercent = baselineTotalFeedDemand > 0 
-    ? Number((((totalFeedRateDemand - baselineTotalFeedDemand) / baselineTotalFeedDemand) * 100).toFixed(1))
+    ? (((totalFeedRateDemand - baselineTotalFeedDemand) / baselineTotalFeedDemand) * 100)
     : 0;
   const outputDeltaPercent = baselineOutputPerMin > 0
-    ? Number((((currentOutputPerMin - baselineOutputPerMin) / baselineOutputPerMin) * 100).toFixed(1))
+    ? (((currentOutputPerMin - baselineOutputPerMin) / baselineOutputPerMin) * 100)
     : 0;
   
   let savingsNote = '未喷涂增产剂：标准基准进料与产出。';
   if (proliferatorTier > 0) {
     if (proliferatorMode === 'output') {
       const savedPercent = Math.round((outputBonus / (1 + outputBonus)) * 100);
-      savingsNote = `额外产出模式：单位产品原料消耗直降 ~${savedPercent}%，大幅减轻混带运力压力！`;
+      savingsNote = `额外产出模式：固定目标产量时单位产品原料消耗降低 ~${savedPercent}%，；固定设备数的进料不变。`;
     } else if (proliferatorMode === 'speed') {
-      savingsNote = `额外速度模式：单台产速激增 +${Math.round(speedBonus * 100)}%，混带输入压力翻倍（${totalFeedRateDemand.toFixed(1)}/s）！`;
+      savingsNote = `额外速度模式：单台产速激增 +${Math.round(speedBonus * 100)}%，混带输入需求提高（${totalFeedRateDemand.toFixed(1)}/s）！`;
     }
   }
 
@@ -576,7 +591,7 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
         level: 'critical',
         category: 'sorter_bottleneck',
         title: `原料【${mat.itemName}】抓取严重不足`,
-        message: `当前单台进料速度已达 ${mat.feedRatePerFacility}/s，${mat.recommendedSorter.colorName}跨${mat.recommendedDistance}格（理论最高仅 ${mat.sorterThroughput}/s）无法满足需求，必定发生卡带断供！`,
+        message: `当前单台进料速度已达 ${mat.feedRatePerFacility}/s，${mat.recommendedSorter.colorName}跨${mat.recommendedDistance}格（理论最高仅 ${mat.sorterThroughput}/s）无法满足需求，可能无法持续满速！`,
         suggestion: `强烈建议将分拣器间距缩短为跨1格，或升级为集装分拣器（白爪），或采用双爪并联进料。`,
         relatedItemId: mat.itemId,
       });
@@ -601,8 +616,8 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
       level: 'info',
       category: 'sorter_bottleneck',
       title: '集装分拣器（白爪）抓取阶梯可进一步释放',
-      message: `当前白爪设定为单次抓取 ${sorterStackTechLevel} 个。在科技树解锁【集装分拣】后可提升至 6 或 8 连抓。`,
-      suggestion: `抓取量提升至 8 后，跨2格仍有 24/s 瞬时通量，可大幅优化布线空间。`,
+      message: `当前白爪设定为单次抓取 ${sorterStackTechLevel} 个。此参数是简化装载假设，实际能力还取决于装卸升级与货物状态。`,
+      suggestion: `请在对应游戏版本验证装卸、跨距和堆叠条件，不能视作无限吞吐。`,
     });
   }
 
@@ -613,7 +628,7 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
       level: 'critical',
       category: 'deadlock_risk',
       title: '混带总载荷极限（防死锁容错极低）',
-      message: `当前混带负载率已达 ${beltLoadPercentage.toFixed(1)}%，闭环回流裕量低于 10%！一旦下游某台机器抓取延迟，未被消耗的原料将反涌塞满回流口，导致整线卡死。`,
+      message: `当前混带负载率已达 ${beltLoadPercentage.toFixed(1)}%，闭环回流裕量低于 10%！一旦下游某台机器抓取延迟，未被消耗的原料可能占满回流口，可能造成阻塞。`,
       suggestion: `强烈建议将负载率控制在 80%~85% 以内，或通过自动集装机升级为高层堆叠带。`,
     });
   } else if (beltLoadPercentage > 80) {
@@ -622,7 +637,7 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
       level: 'warning',
       category: 'deadlock_risk',
       title: '闭环混带高负荷运行预警',
-      message: `负载率为 ${beltLoadPercentage.toFixed(1)}%，处于高位运行区间。残料回流线必须配备 4~6 格暂存箱和防回涌优先级分流器。`,
+      message: `负载率为 ${beltLoadPercentage.toFixed(1)}%，处于高位运行区间。建议检查回流优先级、补料控制和暂存容量。`,
       suggestion: `在入料口使用四向分流器（回流线设为优先输入），防止新原料堵死旧物料回流通道。`,
     });
   }
@@ -639,27 +654,27 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
         category: 'pattern_clustering',
         title: '原料消耗比例悬殊（防局部饥饿提醒）',
         message: `配方中最大物料与最小物料比例达 ${maxCount}:${minCount}。若原料成团入带，末端制造台可能长时间抓不到稀有原料而停工。`,
-        suggestion: `请参考下方的【入带序列可视化图】，按 ${interleavedPattern.length} 格周期严格交错入料，消除局部断料风险。`,
+        suggestion: `请参考下方的【入带序列可视化图】，按 ${interleavedPattern.length} 格周期严格交错入料，减少局部断料风险，仍需实测。`,
       });
     }
   }
 
   // Proliferator impact advisor
-  if (proliferatorMode === 'speed' && (beltLoadPercentage > 75 || materials.some(m => m.feedRatePerFacility > 10))) {
+  if (speedBonus > 0 && (beltLoadPercentage > 75 || materials.some(m => m.feedRatePerFacility > 10))) {
     advisorAlerts.push({
       id: 'proliferator-speed-stress',
       level: 'warning',
       category: 'proliferator_impact',
       title: '增产剂【额外速度】加剧混带运力瓶颈',
-      message: `当前涂覆增产剂加速 (+${Math.round(speedBonus * 100)}%)，单台原料吞吐需求成倍增加（总需求达 ${totalFeedRateDemand.toFixed(1)}/s）。`,
-      suggestion: `若运力紧张或分拣器抓取吃力，切换为【额外产出】可节省原料达 20%~25%，大幅释放混带带宽压力。`,
+      message: `当前有效增产剂加速 (+${Math.round(speedBonus * 100)}%)，单台原料吞吐需求成倍增加（总需求达 ${totalFeedRateDemand.toFixed(1)}/s）。`,
+      suggestion: `若运力紧张或分拣器抓取吃力，切换为【额外产出】在固定目标产量时可降低原料需求；固定设备数进料不变。`,
     });
   }
 
   // 12. Closed-Loop Payload & Anti-Deadlock Capacity Verification Logic
   const isOverLimit = actualFacilitiesCount > maxFacilitiesLimit || isBeltOverloaded;
   const excessCount = Math.max(0, actualFacilitiesCount - maxFacilitiesLimit);
-  const requiredBeltCapacity = Number((totalFeedRateDemand * safetyMultiplier).toFixed(1));
+  const requiredBeltCapacity = (totalFeedRateDemand * safetyMultiplier);
 
   let capacityAlert: CapacityCheckAlert | undefined = undefined;
 
@@ -692,16 +707,16 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
       recommendations.push(`复合扩容升级：将传送带升级为【${comboBelt.name}】并将堆叠层数提升至 ${comboLayers} 层（单带运力达 ${comboBelt.baseSpeed * comboLayers} items/s）。`);
     } else if (!suggestedBelt && !suggestedLayers) {
       const loopsNeeded = Math.ceil(requiredBeltCapacity / (30 * 4));
-      recommendations.push(`拆分并联产线：当前整线需求 (${totalFeedRateDemand.toFixed(1)}/s) 已突破极速蓝带 4 层堆叠极限 (120/s)，建议拆分为 ${loopsNeeded} 条独立的并联混带回路。`);
+      recommendations.push(`拆分并联产线：计入需求容量倍率后 (${requiredBeltCapacity.toFixed(1)}/s) 超过极速蓝带 4 层堆叠运力 (120/s)，建议拆分为 ${loopsNeeded} 条独立的并联混带回路。`);
     }
-    recommendations.push(`回缩安全台数：将单回路串联设施数量控制在防死锁上限 ${maxFacilitiesLimit} 台以内，保证至少 ${redundancyPercent}% 闭环回流残料裕量。`);
+    recommendations.push(`按 ${redundancyPercent}% 需求容量倍率规划：建议不超过 ${maxFacilitiesLimit} 台；未取整时对应约 ${((1 - 1 / safetyMultiplier) * 100).toFixed(1)}% 入口带宽余量，当前可用入口带宽为 ${Math.max(0, beltCapacity - totalFeedRateDemand).toFixed(1)} 件/秒；这不保证回流容量。`);
 
     capacityAlert = {
       isOverLimit: true,
       actualCount: actualFacilitiesCount,
       maxLimit: maxFacilitiesLimit,
       excessCount,
-      totalFeedDemand: Number(totalFeedRateDemand.toFixed(2)),
+      totalFeedDemand: totalFeedRateDemand,
       beltCapacity,
       requiredBeltCapacity,
       currentLayers: beltStackLayers,
@@ -711,18 +726,21 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
       canSolveWithLayers: Boolean(suggestedLayers),
       canSolveWithBeltUpgrade: Boolean(suggestedBelt),
       canSolveWithBoth: Boolean(comboBelt && comboLayers),
-      message: `所需设施数 (${actualFacilitiesCount} 台) 超过当前混带回路在闭环回流防死锁机制下的负载极限 (${maxFacilitiesLimit} 台)，超出 ${excessCount} 台！`,
+      message: `所需设施数 (${actualFacilitiesCount} 台) 超过当前混带回路在入口带宽建议上限 (${maxFacilitiesLimit} 台)，超出 ${excessCount} 台！`,
       recommendations,
     };
   }
 
   return {
+    theoreticalMaxFacilities,
+    cargoRatePerFacilityTotal: feedRatePerFacilityTotal / beltStackLayers,
+    outputs,
     beltCapacity,
     totalRawPerCraft,
-    feedRatePerFacilityTotal: Number(feedRatePerFacilityTotal.toFixed(2)),
+    feedRatePerFacilityTotal: feedRatePerFacilityTotal,
     maxFacilitiesLimit,
     actualFacilitiesCount,
-    totalFeedRateDemand: Number(totalFeedRateDemand.toFixed(2)),
+    totalFeedRateDemand: totalFeedRateDemand,
     beltLoadPercentage,
     isBeltOverloaded,
     interleavedPattern,
@@ -732,12 +750,12 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
       mode: proliferatorMode,
       speedBonus,
       outputBonus,
-      powerIncrease: proliferator.powerConsumptionIncrease,
+      powerIncrease: proliferatorPowerIncrease,
       totalPowerMW,
     },
     proliferatorComparison: {
       baselineTotalFeedDemand,
-      currentTotalFeedDemand: Number(totalFeedRateDemand.toFixed(2)),
+      currentTotalFeedDemand: totalFeedRateDemand,
       demandDeltaPercent,
       baselineOutputPerMin,
       currentOutputPerMin,
@@ -747,7 +765,7 @@ export function calculateDSPMixedBelt(input: CalculationInput): CalculationResul
     bufferStorage: {
       recommendedItems: recommendedBufferItems,
       recommendedChests,
-      residualReturnRate: Number(residualReturnRate.toFixed(2)),
+      residualReturnRate: residualReturnRate,
     },
     warnings,
     capacityAlert,

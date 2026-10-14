@@ -15,9 +15,9 @@ export default defineConfig(() => {
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
           id: '/',
-          name: '戴森球计划：混带蓝图计算器',
-          short_name: 'DSP混带计算',
-          description: '戴森球计划 (DSP) 生产线混带黑盒进料计算与 2D 可视化排布辅助工具',
+          name: '戴森球计划：普通量化与混带规划',
+          short_name: 'DSP量化规划',
+          description: '戴森球计划 (DSP) 完整生产链量化、混带进料计算与 2D 可视化辅助工具',
           theme_color: '#07090e',
           background_color: '#07090e',
           display: 'standalone',

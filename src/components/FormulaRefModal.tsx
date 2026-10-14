@@ -16,7 +16,7 @@ export const FormulaRefModal: React.FC<FormulaRefModalProps> = ({ isOpen, onClos
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-cyan-400" />
-            <h2 className="text-base font-semibold text-white">戴森球计划：混带物理公式与 Wiki 审查规范</h2>
+            <h2 className="text-base font-semibold text-white">戴森球计划：混带物理公式与 计算假设</h2>
           </div>
           <button
             onClick={onClose}
@@ -34,7 +34,7 @@ export const FormulaRefModal: React.FC<FormulaRefModalProps> = ({ isOpen, onClos
               1. 单设施进料速率 (Feed Rate)
             </div>
             <div className="p-2.5 bg-slate-900 rounded font-mono text-cyan-300 text-xs border border-slate-800">
-              v_feed = (原料总数 × 设施倍速) / (生产时间 × 堆叠层数)
+              R_items = 原料总数 × 设施倍速 × 有效加速倍率 / 生产时间；R_cargo = R_items / 实际堆叠高度
             </div>
             <p className="text-slate-400 leading-relaxed">
               用于计算单台制造台/熔炉每秒所消耗的原料总组数。若为多原料混带，每种原料按照其在配方中的单项消耗量独立代入：
@@ -43,7 +43,7 @@ export const FormulaRefModal: React.FC<FormulaRefModalProps> = ({ isOpen, onClos
             <div className="flex items-start gap-2 p-2 bg-amber-950/30 border border-amber-900/50 rounded text-amber-300 text-[11px]">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               <div>
-                <strong>特殊科技锁分支 (is_tech_locked)</strong>：如果玩家在游戏初期未解锁集装箱与堆叠科技，且未使用白爪进行手动堆叠，根据官方物理机制，其实际瞬时吞吐需乘以 0.25（即除以 4）。
+                <strong>特殊科技锁分支 (is_tech_locked)</strong>：如果玩家在游戏初期未解锁集装箱与堆叠科技，且未使用白爪进行手动堆叠，物品需求保持不变。只有实际货物已经堆叠，才可用堆叠高度换算货物包流量。
               </div>
             </div>
           </div>
@@ -59,7 +59,7 @@ export const FormulaRefModal: React.FC<FormulaRefModalProps> = ({ isOpen, onClos
             </div>
             <p className="text-slate-400 leading-relaxed">
               基准范例：满载 4 层极速传送带（蓝带），传送带额定运力为 <span className="font-mono text-slate-200">30 × 4 = 120 items/s</span>。
-              带入配方总耗料即可得出一条混带满负荷供给的最大建筑数量，并向下取整确保绝不卡带。
+              带入配方总耗料即可得出一条混带满负荷供给的最大建筑数量，理论上限向下取整；建议台数还需除以安全倍率，无法保证局部供料或回流不堵塞。
             </p>
           </div>
 
@@ -67,7 +67,7 @@ export const FormulaRefModal: React.FC<FormulaRefModalProps> = ({ isOpen, onClos
           <div className="p-3.5 bg-slate-950/80 rounded-lg border border-slate-800 space-y-2">
             <div className="flex items-center gap-2 text-cyan-400 font-semibold text-sm">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-              3. 分拣器 (爪带) 跨格衰减与白爪兜底机制
+              3. 分拣器 (爪带) 跨距与简化吞吐估算
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left font-mono border-collapse text-[11px]">
@@ -117,15 +117,15 @@ export const FormulaRefModal: React.FC<FormulaRefModalProps> = ({ isOpen, onClos
                       <span>白爪 Mk.IV (集装)</span>
                     </td>
                     <td className="py-1.5">6.0 次/s</td>
-                    <td className="py-1.5 font-bold text-cyan-300">24.0 ~ 48.0 /s</td>
-                    <td className="py-1.5">12.0 ~ 24.0 /s</td>
-                    <td className="py-1.5">8.0 ~ 16.0 /s</td>
+                    <td className="py-1.5 font-bold text-cyan-300">需按升级验证</td>
+                    <td className="py-1.5">需按升级验证</td>
+                    <td className="py-1.5">需按升级验证</td>
                   </tr>
                 </tbody>
               </table>
             </div>
             <p className="text-slate-400 text-[11px] mt-1">
-              * 白爪凭借货物叠加科技，单次可瞬间抓取 4~8 个货物，是高消耗混带的绝对兜底主力。
+              * 白爪装卸升级、方向、跨距与输入堆叠影响吞吐。本工具以有限抓取量作估算，需按对应版本实测；工作功耗按 144 kW 估算。
             </p>
           </div>
 
@@ -158,7 +158,7 @@ export const FormulaRefModal: React.FC<FormulaRefModalProps> = ({ isOpen, onClos
               5. 闭环回流防死锁 (Loopback Belt & Buffer)
             </div>
             <p className="text-slate-400 leading-relaxed text-[11px]">
-              混带最致命的问题是末端残留单一物料堵塞通道造成全线死锁。本工具设计的排布方案在末端强制加入回流线将残料送回始端四向分流器/缓冲箱，并基于用户设定的安全冗余度（105% ~ 120%）计算建议的缓冲仓容积。
+              混带最致命的问题是末端残留单一物料堵塞通道造成全线死锁。本工具设计的排布方案在末端强制加入回流线将残料送回始端四向分流器/缓冲箱，并基于用户设定的安全冗余度（105% ~ 120%）估算缓冲库存；缓冲不能修复长期供需失衡，剩余带宽也不等于实际回流速度。
             </p>
           </div>
         </div>
@@ -166,7 +166,7 @@ export const FormulaRefModal: React.FC<FormulaRefModalProps> = ({ isOpen, onClos
         <div className="mt-6 flex items-center justify-between pt-3 border-t border-slate-800 text-xs">
           <div className="flex items-center gap-1.5 text-emerald-400">
             <ShieldCheck className="w-4 h-4" />
-            <span>算法已与《戴森球计划》最新版本及社区蓝图实践完全对齐</span>
+            <span>稳态物流估算；特殊过程和实际布局需对应版本验证</span>
           </div>
           <button
             type="button"

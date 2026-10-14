@@ -6,7 +6,7 @@
 
 import vanillaData from './dsp_vanilla.json';
 
-export type FacilityCategory = 'assembler' | 'smelter' | 'chemical' | 'refinery' | 'lab' | 'collider';
+export type FacilityCategory = 'assembler' | 'smelter' | 'chemical' | 'refinery' | 'lab' | 'collider' | 'special';
 
 export interface DSPItem {
   id: string; // Numeric ID (e.g. "1001") or legacy slug
@@ -25,6 +25,10 @@ export type MachineSubcategory = 'craft' | 'logistics' | 'power' | 'production' 
 export interface DSPRecipe {
   id: string; // Numeric recipe ID or custom ID
   numericId?: number;
+  allowedFacilityIds?: string[];
+  proliferator?: number;
+  supportsSpeed?: boolean;
+  supportsOutput?: boolean;
   name: string;
   craftTime: number; // in seconds (TimeSpend / 60)
   facilityCategory: FacilityCategory;
@@ -71,9 +75,9 @@ export interface ProliferatorConfig {
 
 export const DSP_FACILITIES: DSPFacility[] = [
   // Assemblers
-  { id: 'assembler_1', numericId: 2301, name: '制造台 Mk.I', category: 'assembler', speedMultiplier: 0.75, powerMW: 0.27, color: '#38bdf8', iconName: 'assembler-1' },
-  { id: 'assembler_2', numericId: 2303, name: '制造台 Mk.II', category: 'assembler', speedMultiplier: 1.0, powerMW: 0.54, color: '#22c55e', iconName: 'assembler-2' },
-  { id: 'assembler_3', numericId: 2304, name: '制造台 Mk.III', category: 'assembler', speedMultiplier: 1.5, powerMW: 1.08, color: '#6366f1', iconName: 'assembler-3' },
+  { id: 'assembler_1', numericId: 2303, name: '制造台 Mk.I', category: 'assembler', speedMultiplier: 0.75, powerMW: 0.27, color: '#38bdf8', iconName: 'assembler-1' },
+  { id: 'assembler_2', numericId: 2304, name: '制造台 Mk.II', category: 'assembler', speedMultiplier: 1.0, powerMW: 0.54, color: '#22c55e', iconName: 'assembler-2' },
+  { id: 'assembler_3', numericId: 2305, name: '制造台 Mk.III', category: 'assembler', speedMultiplier: 1.5, powerMW: 1.08, color: '#6366f1', iconName: 'assembler-3' },
   { id: 'assembler_recompose', numericId: 2318, name: '重组式制造台', category: 'assembler', speedMultiplier: 3.0, powerMW: 2.7, color: '#ec4899', iconName: 'reassembler' },
 
   // Smelters
@@ -82,12 +86,12 @@ export const DSP_FACILITIES: DSPFacility[] = [
   { id: 'smelter_negentropy', numericId: 2319, name: '负熵熔炉 (Mk.III)', category: 'smelter', speedMultiplier: 3.0, powerMW: 2.88, color: '#a855f7', iconName: 'negentropy' },
 
   // Labs
-  { id: 'lab_1', numericId: 2314, name: '矩阵研究站 (Mk.I)', category: 'lab', speedMultiplier: 1.0, powerMW: 0.48, color: '#3b82f6', iconName: 'lab' },
-  { id: 'lab_self_evolution', numericId: 2317, name: '自化矩阵研究站', category: 'lab', speedMultiplier: 3.0, powerMW: 1.92, color: '#ec4899', iconName: 'lab-2' },
+  { id: 'lab_1', numericId: 2901, name: '矩阵研究站 (Mk.I)', category: 'lab', speedMultiplier: 1.0, powerMW: 0.48, color: '#3b82f6', iconName: 'lab' },
+  { id: 'lab_self_evolution', numericId: 2902, name: '自化矩阵研究站', category: 'lab', speedMultiplier: 3.0, powerMW: 1.92, color: '#ec4899', iconName: 'lab-2' },
 
   // Chemical & Refinery
-  { id: 'chemical_1', numericId: 2305, name: '化工厂', category: 'chemical', speedMultiplier: 1.0, powerMW: 0.72, color: '#10b981', iconName: 'chemical-plant' },
-  { id: 'chemical_quantum', numericId: 2316, name: '量子化工厂', category: 'chemical', speedMultiplier: 2.0, powerMW: 2.16, color: '#8b5cf6', iconName: 'chemical-plant-2' },
+  { id: 'chemical_1', numericId: 2309, name: '化工厂', category: 'chemical', speedMultiplier: 1.0, powerMW: 0.72, color: '#10b981', iconName: 'chemical-plant' },
+  { id: 'chemical_quantum', numericId: 2317, name: '量子化工厂', category: 'chemical', speedMultiplier: 2.0, powerMW: 2.16, color: '#8b5cf6', iconName: 'chemical-plant-2' },
   { id: 'refinery_1', numericId: 2308, name: '原油精炼厂', category: 'refinery', speedMultiplier: 1.0, powerMW: 0.96, color: '#64748b', iconName: 'oil-refinery' },
 
   // Collider
@@ -132,7 +136,7 @@ export const DSP_SORTERS: DSPSorter[] = [
   { tier: 1, name: '分拣器 Mk.I', colorName: '黄爪', hexColor: '#eab308', baseTripsPerSec: 1.5, baseStack: 1, idlePowerKW: 2, workPowerKW: 18, iconName: 'inserter-1' },
   { tier: 2, name: '分拣器 Mk.II', colorName: '绿爪', hexColor: '#22c55e', baseTripsPerSec: 3.0, baseStack: 1, idlePowerKW: 2, workPowerKW: 36, iconName: 'inserter-2' },
   { tier: 3, name: '分拣器 Mk.III', colorName: '蓝爪', hexColor: '#3b82f6', baseTripsPerSec: 6.0, baseStack: 1, idlePowerKW: 2, workPowerKW: 72, iconName: 'inserter-3' },
-  { tier: 4, name: '集装分拣器 Mk.IV', colorName: '白爪', hexColor: '#f8fafc', baseTripsPerSec: 6.0, baseStack: 4, idlePowerKW: 2, workPowerKW: 90, iconName: 'inserter-4' },
+  { tier: 4, name: '集装分拣器 Mk.IV', colorName: '白爪', hexColor: '#f8fafc', baseTripsPerSec: 6.0, baseStack: 4, idlePowerKW: 2, workPowerKW: 144, iconName: 'inserter-4' },
 ];
 
 export const PROLIFERATOR_CONFIGS: ProliferatorConfig[] = [
@@ -194,11 +198,12 @@ function determineFacilityCategory(factories?: number[]): FacilityCategory {
   if (!factories || factories.length === 0) return 'assembler';
   const f = factories[0];
   if (f === 2302 || f === 2315 || f === 2319) return 'smelter';
-  if (f === 2305 || f === 2309 || f === 2316) return 'chemical';
+  if (f === 2309 || f === 2317) return 'chemical';
   if (f === 2308) return 'refinery';
-  if (f === 2314 || f === 2317) return 'lab';
+  if (f === 2901 || f === 2902) return 'lab';
   if (f === 2310) return 'collider';
-  return 'assembler';
+  if ([2303,2304,2305,2318].includes(f)) return 'assembler';
+  return 'special';
 }
 
 // Build items dictionary from Vanilla.json
@@ -307,7 +312,7 @@ for (const key of Object.keys(rawRecipes)) {
     count: r.ResultCounts[idx] || 1,
   }));
 
-  const craftTime = Number(((r.TimeSpend || 60) / 60).toFixed(2));
+  const craftTime = (r.TimeSpend || 60) / 60;
   const facilityCategory = determineFacilityCategory(r.Factories);
   const isPreset = priorityRecipeNames.some(pName => r.Name.includes(pName));
 
@@ -320,6 +325,10 @@ for (const key of Object.keys(rawRecipes)) {
   DSP_RECIPES.push({
     id: `recipe_${r.ID}`,
     numericId: r.ID,
+    allowedFacilityIds: (r.Factories || []).map(String),
+    proliferator: r.Proliferator ?? 0,
+    supportsSpeed: Boolean(r.Proliferator & 1),
+    supportsOutput: Boolean(r.Proliferator & 2),
     name: r.Name,
     craftTime,
     facilityCategory,
@@ -346,58 +355,64 @@ DSP_RECIPES.sort((a, b) => {
  * Extensible Game Data Importer (PRD 2.1)
  * Imports custom or mod data matching DSPCalculator/dsp-calc format (e.g. GenesisBook).
  */
-export function importCustomGameData(gameDataJson: any): number {
-  if (!gameDataJson || !gameDataJson.recipes) return 0;
-  let count = 0;
-
-  if (gameDataJson.items) {
-    for (const key of Object.keys(gameDataJson.items)) {
-      const it = gameDataJson.items[key];
-      const idStr = String(it.ID);
-      const visuals = determineItemVisuals(it.ID, it.Name);
-      DSP_ITEMS[idStr] = {
-        id: idStr,
-        numericId: it.ID,
-        name: it.Name,
-        category: visuals.category,
-        color: visuals.color,
-        iconName: it.IconName,
-        iconUrl: it.IconName ? `/dsp_icons/${it.IconName}.png` : undefined,
-        iconSymbol: visuals.symbol,
-      };
-    }
-  }
-
-  for (const key of Object.keys(gameDataJson.recipes)) {
-    const r = gameDataJson.recipes[key];
-    if (!r.Items || !r.Results) continue;
-    const inputs = r.Items.map((itemId: number, idx: number) => ({
-      itemId: String(itemId),
-      count: r.ItemCounts[idx] || 1,
-    }));
-    const outputs = r.Results.map((resultId: number, idx: number) => ({
-      itemId: String(resultId),
-      count: r.ResultCounts[idx] || 1,
-    }));
-    const craftTime = Number(((r.TimeSpend || 60) / 60).toFixed(2));
-    const facilityCat = determineFacilityCategory(r.Factories);
-
-    DSP_RECIPES.unshift({
-      id: `imported_${r.ID}_${Date.now()}`,
-      numericId: r.ID,
-      name: `[MOD] ${r.Name}`,
-      craftTime,
-      facilityCategory: facilityCat,
-      inputs,
-      outputs,
-      iconName: r.IconName,
-      iconUrl: r.IconName ? `/dsp_icons/${r.IconName}.png` : undefined,
-      description: `导入扩展配方 · 周期 ${craftTime}s`,
-      isCustom: true,
-      isPreset: true,
-    });
-    count++;
-  }
-
-  return count;
+export function isFacilityCompatible(recipe: DSPRecipe, facility: DSPFacility): boolean {
+  return recipe.allowedFacilityIds?.length
+    ? recipe.allowedFacilityIds.includes(String(facility.numericId)) || recipe.allowedFacilityIds.includes(facility.id)
+    : recipe.facilityCategory === facility.category;
 }
+
+export function getRecipeMultipliers(recipe: DSPRecipe, tier: 0 | 1 | 2 | 3, mode: 'none' | 'speed' | 'output'): {speed:number;output:number;power:number} {
+  if (![0,1,2,3].includes(tier) || !['none','speed','output'].includes(mode)) throw new Error('无效增产设置');
+  const config = PROLIFERATOR_CONFIGS[tier];
+  const speedAllowed = recipe.supportsSpeed ?? (recipe.proliferator === undefined || Boolean(recipe.proliferator & 1));
+  const outputAllowed = recipe.supportsOutput ?? (recipe.proliferator === undefined || Boolean(recipe.proliferator & 2));
+  const active = tier > 0 && ((mode === 'speed' && speedAllowed) || (mode === 'output' && outputAllowed));
+  return {speed: active && mode === 'speed' ? 1 + config.extraSpeedBonus : 1, output: active && mode === 'output' ? 1 + config.extraOutputBonus : 1, power: active ? 1 + config.powerConsumptionIncrease : 1};
+}
+
+export function importCustomGameData(gameDataJson: any): {items: Record<string,DSPItem>;recipes:DSPRecipe[]} {
+  if (!gameDataJson || typeof gameDataJson !== 'object' || !gameDataJson.recipes || typeof gameDataJson.recipes !== 'object') throw new Error('缺少配方定义');
+  const items: Record<string,DSPItem> = {};
+  const recipes: DSPRecipe[] = [];
+  const validId = (id: unknown) => typeof id === 'number' && Number.isSafeInteger(id) && id >= 0;
+  for (const it of Object.values(gameDataJson.items || {}) as any[]) {
+    if (!validId(it.ID) || typeof it.Name !== 'string' || !it.Name.trim() || items[String(it.ID)]) throw new Error('无效或重复物品定义');
+    const visuals = determineItemVisuals(it.ID,it.Name);
+    items[String(it.ID)] = {id:String(it.ID),numericId:it.ID,name:it.Name,category:visuals.category,color:visuals.color,iconSymbol:visuals.symbol,iconName:it.IconName,iconUrl:it.IconName ? `/dsp_icons/${it.IconName}.png` : undefined};
+  }
+  const seen = new Set<number>();
+  for (const r of Object.values(gameDataJson.recipes) as any[]) {
+    if (!validId(r.ID) || seen.has(r.ID) || typeof r.Name !== 'string' || !r.Name.trim() || !Number.isFinite(r.TimeSpend) || r.TimeSpend <= 0) throw new Error('无效或重复配方定义');
+    seen.add(r.ID);
+    const convert = (ids:any,counts:any) => {
+      if (!Array.isArray(ids) || !Array.isArray(counts) || ids.length !== counts.length) throw new Error('无效配方物料数组');
+      return ids.map((id:any,i:number) => {
+        if (!validId(id) || (!items[String(id)] && !DSP_ITEMS[String(id)]) || !Number.isFinite(counts[i]) || counts[i] <= 0 || (determineFacilityCategory(r.Factories) !== 'special' && !Number.isSafeInteger(counts[i]))) throw new Error('无效物料 ID 或数量');
+        return {itemId:String(id),count:counts[i]};
+      });
+    };
+    if (r.Factories !== undefined && (!Array.isArray(r.Factories) || !r.Factories.every(validId))) throw new Error('无效建筑定义');
+    if (r.Proliferator !== undefined && (!Number.isInteger(r.Proliferator) || r.Proliferator < 0 || r.Proliferator > 7)) throw new Error('无效增产标记');
+    const inputs = convert(r.Items,r.ItemCounts);
+    const outputs = convert(r.Results,r.ResultCounts);
+    // Source-format gathering/external definitions are not deterministic production.
+    // Validate their arrays before skipping them; malformed manufacturing never defaults.
+    if (!inputs.length || !outputs.length) {
+      if (r.Type === -1) continue;
+      throw new Error('生产配方需要输入和输出');
+    }
+    recipes.push({id:`imported_${r.ID}`,numericId:r.ID,name:`[MOD] ${r.Name}`,craftTime:r.TimeSpend/60,facilityCategory:determineFacilityCategory(r.Factories),allowedFacilityIds:(r.Factories || []).map(String),proliferator:r.Proliferator ?? 0,supportsSpeed:Boolean(r.Proliferator & 1),supportsOutput:Boolean(r.Proliferator & 2),inputs,outputs,isCustom:true,isPreset:true});
+  }
+  if (!recipes.length) throw new Error('没有可导入配方');
+  return {items,recipes};
+}
+
+// Vanilla is shared read-only between independent workspaces.
+for (const recipe of DSP_RECIPES) {
+  for (const ingredient of [...recipe.inputs,...recipe.outputs]) Object.freeze(ingredient);
+  Object.freeze(recipe.inputs); Object.freeze(recipe.outputs);
+  if (recipe.allowedFacilityIds) Object.freeze(recipe.allowedFacilityIds);
+  Object.freeze(recipe);
+}
+for (const item of Object.values(DSP_ITEMS)) Object.freeze(item);
+Object.freeze(DSP_RECIPES); Object.freeze(DSP_ITEMS);

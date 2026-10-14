@@ -1,0 +1,52 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import React from 'react';
+import { JSDOM } from 'jsdom';
+import App from '../App';
+import { STORAGE_KEY, restoreWorkspaces } from './workspaces';
+
+test('mode switches preserve actual mounted 2D canvases and independent configurations',async()=>{
+  const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://dsp.example/'});
+  Object.defineProperty(globalThis,'window',{configurable:true,value:dom.window});
+  Object.defineProperty(globalThis,'document',{configurable:true,value:dom.window.document});
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:dom.window.navigator});
+  Object.defineProperty(dom.window,'matchMedia',{value:()=>({matches:false,addEventListener(){},removeEventListener(){}})});
+  const {render,fireEvent,cleanup}=await import('@testing-library/react');
+  const ui=render(<App/>);
+  try {
+    const mixed=ui.getByTestId('mixed-workspace');
+    const mixedSvg=mixed.querySelector('svg[viewBox]');
+    assert.ok(mixedSvg);
+    fireEvent.click(ui.getByRole('button',{name:'普通量化模式'}));
+    assert.equal(mixed.hidden,true);
+    const ordinary=ui.getByTestId('ordinary-workspace');
+    assert.equal(ordinary.hidden,false);
+    const normalSvg=ui.getByRole('img',{name:'完整生产链图'});
+    fireEvent.change(ui.getByLabelText('目标产量 1'),{target:{value:'180'}});
+    fireEvent.click(ui.getByLabelText('放大生产图'));
+    fireEvent.click(ui.getByRole('button',{name:'混带模式'}));
+    assert.equal(mixed.hidden,false);
+    assert.equal(mixed.querySelector('svg[viewBox]'),mixedSvg);
+    fireEvent.click(ui.getByRole('button',{name:'普通量化模式'}));
+    assert.equal(ui.getByRole('img',{name:'完整生产链图'}),normalSvg);
+    assert.equal((ui.getByLabelText('目标产量 1') as HTMLInputElement).value,'180');
+    assert.equal(ui.getByLabelText('生产图缩放').textContent,'115%');
+    const saved=restoreWorkspaces(window.localStorage.getItem(STORAGE_KEY)!)!;
+    assert.equal(saved.ordinary.input.targets[0].ratePerMinute,180);
+    assert.equal(saved.mixed.input.beltStackLayers,1);
+    fireEvent.click(ui.getByText('全局设置'));
+    assert.ok(ui.getByRole('dialog', {name:'普通量化模式设定'}));
+    fireEvent.click(ui.getByRole('button', {name:'普通模式传送带 B1'}));
+    assert.equal((ui.getByLabelText('生产传送带') as HTMLSelectElement).value, '1');
+    fireEvent.click(ui.getByRole('button', {name:'完成并应用'}));
+    fireEvent.click(ui.getByRole('button', {name:'混带模式'}));
+    fireEvent.click(ui.getByText('全局设置'));
+    assert.ok(ui.getByRole('dialog', {name:'混带模式设定'}));
+    fireEvent.click(ui.getByRole('button', {name:'完成并应用'}));
+    fireEvent.click(ui.getByRole('button', {name:'普通量化模式'}));
+    fireEvent.click(ui.getByRole('button',{name:'重置当前模式'}));
+    assert.equal((ui.getByLabelText('目标产量 1') as HTMLInputElement).value,'60');
+    fireEvent.click(ui.getByRole('button',{name:/UNDO/}));
+    assert.equal((ui.getByLabelText('目标产量 1') as HTMLInputElement).value,'180');
+  } finally {cleanup();dom.window.close();}
+});

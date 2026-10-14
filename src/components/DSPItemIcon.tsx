@@ -85,6 +85,13 @@ export const DSPItemIcon: React.FC<DSPItemIconProps> = ({
   );
 };
 
+/** Product badge used by both workspaces: the same cyan outline and pixel shadow. */
+export const DSPFramedItemIcon: React.FC<DSPItemIconProps> = ({ size = 24, ...props }) => (
+  <div style={{ width: size + 8, height: size + 8 }} className="rounded-lg bg-black border-2 border-[#00f0ff] p-0.5 flex items-center justify-center shrink-0 shadow-[2px_2px_0px_#00f0ff]">
+    <DSPItemIcon {...props} size={size} />
+  </div>
+);
+
 // =========================================================================
 // DSP Belt Item Icon Component (belt-1.png, belt-2.png, belt-3.png)
 // =========================================================================

@@ -6,3 +6,31 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local agent state and development process notes
+.aistudio/
+.agents/
+.codex/
+.superpowers/
+docs/superpowers/
+docs/research/
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+
+# Local editors, screenshots and temporary output
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+*.tsbuildinfo
+*.tmp
+*.bak
+playwright-report/
+test-results/
+codex-clipboard-*.png
+
+# Unused scaffold metadata and alternative lockfile (npm is canonical)
+/metadata.json
+/bun.lock
+/.env.example

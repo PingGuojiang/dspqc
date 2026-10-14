@@ -27,6 +27,7 @@ import { CalculationInput } from '../engine/calculator';
 import { DSPItemIcon } from './DSPItemIcon';
 
 interface ConfigCardProps {
+  onImportData?: (data: ReturnType<typeof importCustomGameData>) => void;
   inputState: CalculationInput;
   onChangeInput: (updater: (prev: CalculationInput) => CalculationInput) => void;
   onOpenCustomRecipe: () => void;
@@ -34,6 +35,7 @@ interface ConfigCardProps {
 }
 
 export const ConfigCard: React.FC<ConfigCardProps> = ({
+  onImportData,
   inputState,
   onChangeInput,
   onOpenCustomRecipe,
@@ -97,7 +99,10 @@ export const ConfigCard: React.FC<ConfigCardProps> = ({
     reader.onload = (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
-        const importedCount = importCustomGameData(json);
+        if (!onImportData) throw new Error('未配置工作区导入回调');
+        const data = importCustomGameData(json);
+        onImportData(data);
+        const importedCount = data.recipes.length;
         if (importedCount > 0) {
           setImportNotice(`成功导入 ${importedCount} 个 Mod/扩展配方！已加入配方库。`);
           setTimeout(() => setImportNotice(null), 3000);
