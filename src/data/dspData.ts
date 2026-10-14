@@ -6,6 +6,8 @@
 
 import vanillaData from './dsp_vanilla.json';
 
+const assetBase = (import.meta.env?.BASE_URL ?? '/');
+
 export type FacilityCategory = 'assembler' | 'smelter' | 'chemical' | 'refinery' | 'lab' | 'collider' | 'special';
 
 export interface DSPItem {
@@ -222,7 +224,7 @@ for (const key of Object.keys(rawItems)) {
     category: visuals.category,
     color: visuals.color,
     iconName: item.IconName,
-    iconUrl: item.IconName ? `/dsp_icons/${item.IconName}.png` : undefined,
+    iconUrl: item.IconName ? `${assetBase}dsp_icons/${item.IconName}.png` : undefined,
     iconSymbol: visuals.symbol,
     gridIndex: item.GridIndex,
   };
@@ -335,7 +337,7 @@ for (const key of Object.keys(rawRecipes)) {
     inputs,
     outputs,
     iconName: r.IconName,
-    iconUrl: r.IconName ? `/dsp_icons/${r.IconName}.png` : undefined,
+    iconUrl: r.IconName ? `${assetBase}dsp_icons/${r.IconName}.png` : undefined,
     description: `官方配方 ID: ${r.ID} · 周期: ${craftTime}s · 产物: ${outputs.map((o: { itemId: string; count: number }) => DSP_ITEMS[o.itemId]?.name || o.itemId).join(', ')}`,
     isPreset,
     isMachine,
@@ -378,7 +380,7 @@ export function importCustomGameData(gameDataJson: any): {items: Record<string,D
   for (const it of Object.values(gameDataJson.items || {}) as any[]) {
     if (!validId(it.ID) || typeof it.Name !== 'string' || !it.Name.trim() || items[String(it.ID)]) throw new Error('无效或重复物品定义');
     const visuals = determineItemVisuals(it.ID,it.Name);
-    items[String(it.ID)] = {id:String(it.ID),numericId:it.ID,name:it.Name,category:visuals.category,color:visuals.color,iconSymbol:visuals.symbol,iconName:it.IconName,iconUrl:it.IconName ? `/dsp_icons/${it.IconName}.png` : undefined};
+    items[String(it.ID)] = {id:String(it.ID),numericId:it.ID,name:it.Name,category:visuals.category,color:visuals.color,iconSymbol:visuals.symbol,iconName:it.IconName,iconUrl:it.IconName ? `${assetBase}dsp_icons/${it.IconName}.png` : undefined};
   }
   const seen = new Set<number>();
   for (const r of Object.values(gameDataJson.recipes) as any[]) {
