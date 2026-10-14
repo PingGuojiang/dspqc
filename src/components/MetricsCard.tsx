@@ -1,3 +1,4 @@
+import { useDSPItems } from '../data/GameDataContext';
 import React from 'react';
 import { 
   Activity, 
@@ -26,7 +27,7 @@ import {
   Tooltip as RechartsTooltip 
 } from 'recharts';
 import { CalculationInput, CalculationResult } from '../engine/calculator';
-import { DSP_ITEMS, DSP_BELTS, DSP_SORTERS, PROLIFERATOR_CONFIGS } from '../data/dspData';
+import { DSP_ITEMS, DSP_BELTS, DSP_SORTERS, PROLIFERATOR_CONFIGS, getRecipeMultipliers } from '../data/dspData';
 import { DSPItemIcon, DSPBeltIcon, DSPSorterIcon } from './DSPItemIcon';
 import { BeltSequencePattern } from './BeltSequencePattern';
 import { SmartAdvisorAlert } from './SmartAdvisorAlert';
@@ -44,6 +45,7 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
   inputState,
   onChangeInput 
 }) => {
+  const DSP_ITEMS = useDSPItems();
   const {
     beltCapacity,
     maxFacilitiesLimit,
@@ -81,7 +83,7 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
                   ⚠️ 产线运力超载警示
                 </span>
                 <span className="text-sm font-bold text-rose-200">
-                  所需设施超出闭环回流防死锁实际负载极限
+                  所需设施超出配置的入口运力上限
                 </span>
               </div>
             </div>
@@ -135,8 +137,8 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
 
           {/* Physics & Mechanism Warning Callout */}
           <p className="text-xs text-rose-200/90 leading-relaxed bg-rose-950/40 p-2.5 rounded-lg border border-rose-900/60 font-sans">
-            <strong>【戴森球计划 Wiki 闭环回流防死锁机制审查】</strong>
-            ：混带回路尾端必须预留足够的残料回流带宽送入始端四向分流器。当前生产线超载运行，将导致闭环回流线物料积压断流、始端混料口被单一种类原料顶死堵塞，后段设施发生大面积断供卡死！
+            <strong>【混带稳态容量检查】</strong>
+            ：入口运力不足时无法维持所有设施满速生产。回流优先级、输入配比、补料控制和输出背压也会影响实际运行，剩余入口带宽不能代表实际回流速率。
           </p>
 
           {/* Actionable Upgrade Recommendations & One-Click Fix Buttons */}
@@ -348,7 +350,7 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
             <span className="text-[10px] font-mono text-slate-400 uppercase">MW</span>
           </div>
           <span className="text-[10px] text-slate-400 block mt-0.5 font-mono">
-            单台: {(proliferatorEffectiveBonus.totalPowerMW / actualFacilitiesCount).toFixed(2)} MW
+            单台: {(actualFacilitiesCount > 0 ? proliferatorEffectiveBonus.totalPowerMW / actualFacilitiesCount : 0).toFixed(2)} MW
           </span>
         </div>
       </div>
@@ -375,8 +377,10 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
         const comp = result.proliferatorComparison;
         const currentTier = inputState?.proliferatorTier ?? 0;
         const currentMode = inputState?.proliferatorMode ?? 'output';
-        const isSpeed = currentTier > 0 && currentMode === 'speed';
-        const isOutput = currentTier > 0 && currentMode === 'output';
+        const isSpeed = result.proliferatorEffectiveBonus.speedBonus > 0;
+        const isOutput = result.proliferatorEffectiveBonus.outputBonus > 0;
+        const outputAllowed = !!inputState && getRecipeMultipliers(inputState.recipe,3,'output').output > 1;
+        const speedAllowed = !!inputState && getRecipeMultipliers(inputState.recipe,3,'speed').speed > 1;
 
         return (
           <div className="bg-slate-900/95 border border-slate-800 rounded-xl p-4 shadow-lg backdrop-blur-xs space-y-3">
@@ -390,7 +394,7 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
                       ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' 
                       : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                   }`}>
-                    {isOutput ? '额外产出模式 (-20%~25%原料消耗)' : '额外速度模式 (+100%进料通量)'}
+                    {isOutput ? '额外产出 +'+Math.round(result.proliferatorEffectiveBonus.outputBonus*100)+'%' : isSpeed ? '额外速度 +'+Math.round(result.proliferatorEffectiveBonus.speedBonus*100)+'%' : '该配方/模式未产生增产效果'}
                   </span>
                 )}
               </div>
@@ -412,6 +416,7 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
                   </button>
                   <button
                     type="button"
+                    disabled={!outputAllowed}
                     onClick={() => onChangeInput(prev => ({ 
                       ...prev, 
                       proliferatorTier: prev.proliferatorTier === 0 ? 3 : prev.proliferatorTier, 
@@ -429,6 +434,7 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
                   </button>
                   <button
                     type="button"
+                    disabled={!speedAllowed}
                     onClick={() => onChangeInput(prev => ({ 
                       ...prev, 
                       proliferatorTier: prev.proliferatorTier === 0 ? 3 : prev.proliferatorTier, 
@@ -522,7 +528,7 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
                   </div>
                 </div>
                 <p className="text-[10px] text-slate-500 mt-2">
-                  {currentTier === 0 ? '未加速增产。' : `涂覆后成品产量提升，制造台产出效率为 ${(comp.currentOutputPerMin / Math.max(1, comp.baselineOutputPerMin)).toFixed(2)}x 倍速。`}
+                  {!isOutput && !isSpeed ? '未启用有效增产模式。' : `涂覆后成品产量提升，制造台产出效率为 ${(comp.currentOutputPerMin / Math.max(1, comp.baselineOutputPerMin)).toFixed(2)}x 倍速。`}
                 </p>
               </div>
             </div>
@@ -686,13 +692,13 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
         <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 mb-2">
           <div className="flex items-center gap-2">
             <Box className="w-4 h-4 text-cyan-400" />
-            <h3 className="text-sm font-semibold text-white">始端缓冲箱与回流防死锁规划</h3>
+            <h3 className="text-sm font-semibold text-white">始端缓冲与回流规划（估算）</h3>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 text-xs">
           <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800/80">
-            <span className="text-slate-400 block text-[11px]">建议缓冲容积 (容错率防堵)</span>
+            <span className="text-slate-400 block text-[11px]">约 10 秒消耗量的缓冲参考</span>
             <div className="font-mono text-base font-bold text-cyan-300 mt-0.5">
               {bufferStorage.recommendedItems} <span className="text-xs font-normal text-slate-400">items</span>
             </div>
@@ -702,14 +708,14 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
           </div>
 
           <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800/80">
-            <span className="text-slate-400 block text-[11px]">闭环回流线残料回流速率</span>
+            <span className="text-slate-400 block text-[11px]">入口未占用运力</span>
             <div className={`font-mono text-base font-bold mt-0.5 ${
               capacityAlert?.isOverLimit ? 'text-rose-400' : 'text-amber-300'
             }`}>
               {bufferStorage.residualReturnRate} <span className="text-xs font-normal text-slate-400">items/s</span>
             </div>
             <span className="text-[10px] text-slate-500 mt-0.5 block">
-              {capacityAlert?.isOverLimit ? '⚠️ 回流余量严重不足，可能导致卡带停滞' : '未被设施吸收的多余物料平稳回流始端'}
+              {capacityAlert?.isOverLimit ? '⚠️ 入口需求超过配置容量' : '不代表实际回流流量，需检查回流与补料控制'}
             </span>
           </div>
         </div>
@@ -776,7 +782,7 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
           const fullPieData = [...chartData];
           if (unallocatedRate > 0.05) {
             fullPieData.push({
-              name: '未占用运力 (回流/安全裕量)',
+              name: '未占用入口运力',
               itemId: 'margin',
               value: Number(unallocatedRate.toFixed(2)),
               percentage: unallocatedPercent,
@@ -935,7 +941,7 @@ export const MetricsCard: React.FC<MetricsCardProps> = ({
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="w-2.5 h-2.5 rounded-xs shrink-0 bg-slate-600" />
                         <span className="text-slate-400 text-[11px] truncate">
-                          闭环防死锁安全回流裕量 (空余带速)
+                          入口空余带宽（非实际回流）
                         </span>
                       </div>
                       <div className="flex items-center gap-2 font-mono shrink-0 text-slate-500">

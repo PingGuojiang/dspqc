@@ -1,6 +1,0 @@
-{
-  "name": "戴森球计划：混带蓝图计算器",
-  "description": "戴森球计划 (DSP) 生产线混带黑盒进料计算与 2D 可视化排布辅助工具，精确还原游戏物理推演、增产剂模式、分拣器跨格衰减与闭环回流防死锁。",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

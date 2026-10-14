@@ -15,25 +15,30 @@ import {
 import { 
   DSP_BELTS, 
   PROLIFERATOR_CONFIGS, 
+  getRecipeMultipliers,
   importCustomGameData 
 } from '../data/dspData';
 import { CalculationInput } from '../engine/calculator';
 import { DSPBeltIcon, DSPSorterIcon } from './DSPItemIcon';
 
 interface GlobalDrawerProps {
+  onImportData: (data: ReturnType<typeof importCustomGameData>) => void;
   isOpen: boolean;
   onClose: () => void;
   inputState: CalculationInput;
   onChangeInput: (updater: (prev: CalculationInput) => CalculationInput) => void;
   onResetDefaults: () => void;
+  modeLabel?: string;
 }
 
 export const GlobalDrawer: React.FC<GlobalDrawerProps> = ({
+  onImportData,
   isOpen,
   onClose,
   inputState,
   onChangeInput,
   onResetDefaults,
+  modeLabel = '混带模式',
 }) => {
   const [importNotice, setImportNotice] = React.useState<string | null>(null);
 
@@ -55,7 +60,9 @@ export const GlobalDrawer: React.FC<GlobalDrawerProps> = ({
     reader.onload = (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
-        const count = importCustomGameData(json);
+        const data = importCustomGameData(json);
+        const count = data.recipes.length;
+        onImportData(data);
         if (count > 0) {
           setImportNotice(`已成功载入 ${count} 个扩展/Mod 配方！`);
           setTimeout(() => setImportNotice(null), 3500);
@@ -72,10 +79,12 @@ export const GlobalDrawer: React.FC<GlobalDrawerProps> = ({
     e.target.value = '';
   };
 
+  const outputAllowed = getRecipeMultipliers(inputState.recipe, 3, 'output').output > 1;
+  const speedAllowed = getRecipeMultipliers(inputState.recipe, 3, 'speed').speed > 1;
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex justify-start">
       {/* Dark backdrop overlay */}
       <div 
         onClick={onClose}
@@ -84,14 +93,14 @@ export const GlobalDrawer: React.FC<GlobalDrawerProps> = ({
 
       {/* Drawer Panel */}
       <aside 
-        className="relative w-full max-w-md h-full bg-[#0b0e17] border-l border-slate-800 shadow-2xl flex flex-col z-10 text-slate-200 overflow-hidden"
+        role="dialog" aria-label={`${modeLabel}设定`} className="relative w-full max-w-md h-full bg-[#0b0e17] border-r border-slate-800 shadow-2xl flex flex-col z-10 text-slate-200 overflow-hidden"
       >
         {/* Drawer Header */}
         <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-[#07090e]">
           <div className="flex items-center gap-2">
             <Settings2 className="w-4 h-4 text-cyan-400" />
             <h2 className="text-sm font-bold text-white tracking-wide">
-              全局设定 (FactorioLab 抽屉架构)
+              {modeLabel}设定
             </h2>
           </div>
           <button
@@ -176,7 +185,7 @@ export const GlobalDrawer: React.FC<GlobalDrawerProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <DSPSorterIcon tier={4} size={20} />
-                  <span className="text-slate-300 font-medium">白爪集装科技判定 (is_tech_locked)</span>
+                  <span className="text-slate-300 font-medium">简化分拣器装载假设</span>
                 </div>
                 <button
                   type="button"
@@ -195,11 +204,11 @@ export const GlobalDrawer: React.FC<GlobalDrawerProps> = ({
 
               {isTechLocked ? (
                 <p className="text-[11px] text-amber-300/90 leading-tight">
-                  已开启初期未解锁惩罚：未解锁科技且不用白爪手动堆叠，进料吞吐将除以 4。
+                  按单件抓取估算；原料需求不受科技锁影响。带上只有实际堆叠的货物才能获得堆叠容量。
                 </p>
               ) : (
                 <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
-                  <span>集装分拣器 (白爪) 单次抓取量:</span>
+                  <span>白爪每趟件数（手动估算）:</span>
                   <div className="flex items-center gap-1 font-mono">
                     {[2, 4, 6, 8].map(lvl => (
                       <button
@@ -278,6 +287,7 @@ export const GlobalDrawer: React.FC<GlobalDrawerProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
+                  disabled={!outputAllowed}
                   onClick={() => onChangeInput(prev => ({ ...prev, proliferatorMode: 'output', customFacilityCount: undefined }))}
                   className={`p-2 rounded-lg border text-left transition ${
                     proliferatorMode === 'output'
@@ -285,12 +295,13 @@ export const GlobalDrawer: React.FC<GlobalDrawerProps> = ({
                       : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <div className="text-xs text-emerald-400">额外产出 (推荐)</div>
+                  <div className="text-xs text-emerald-400">{outputAllowed ? '额外产出' : '额外产出（不支持）'}</div>
                   <div className="text-[10px] text-slate-500 mt-0.5">原料进料速率不变</div>
                 </button>
 
                 <button
                   type="button"
+                  disabled={!speedAllowed}
                   onClick={() => onChangeInput(prev => ({ ...prev, proliferatorMode: 'speed', customFacilityCount: undefined }))}
                   className={`p-2 rounded-lg border text-left transition ${
                     proliferatorMode === 'speed'
@@ -298,7 +309,7 @@ export const GlobalDrawer: React.FC<GlobalDrawerProps> = ({
                       : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <div className="text-xs text-cyan-400">额外速度</div>
+                  <div className="text-xs text-cyan-400">{speedAllowed ? '额外速度' : '额外速度（不支持）'}</div>
                   <div className="text-[10px] text-slate-500 mt-0.5">原料进料需求等比翻倍</div>
                 </button>
               </div>
@@ -320,7 +331,7 @@ export const GlobalDrawer: React.FC<GlobalDrawerProps> = ({
               />
               <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-0.5">
                 <span>100% 极限</span>
-                <span>110% 推荐防卡带</span>
+                <span>110% 需求容量倍率</span>
                 <span>130% 宽容度</span>
               </div>
             </div>

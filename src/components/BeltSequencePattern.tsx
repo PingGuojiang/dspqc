@@ -1,5 +1,6 @@
+import { useDSPItems } from '../data/GameDataContext';
 import React, { useState } from 'react';
-import { BeltSequenceInfo, MaterialFeedSpec } from '../engine/calculator';
+import { BeltSequenceInfo, MaterialFeedSpec, generateInterleavedPattern, normalizeRecipeInputs, supportsMixedRecipe } from '../engine/calculator';
 import { DSPRecipe, DSPBelt, DSP_ITEMS } from '../data/dspData';
 import { DSPItemIcon } from './DSPItemIcon';
 import { 
@@ -28,41 +29,6 @@ export interface BeltSequencePatternProps {
   defaultExpanded?: boolean;
 }
 
-// Bresenham error-distribution algorithm to evenly interleave inputs
-function computeInterleavedSequence(inputs: { itemId: string; count: number }[]): string[] {
-  if (!inputs || inputs.length === 0) return [];
-  if (inputs.length === 1) return Array(inputs[0].count).fill(inputs[0].itemId);
-
-  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
-  const commonDivisor = inputs.reduce((acc, curr) => gcd(acc, curr.count), inputs[0].count);
-  const normalizedInputs = inputs.map(i => ({
-    itemId: i.itemId,
-    count: Math.max(1, Math.round(i.count / (commonDivisor || 1))),
-  }));
-
-  const totalSlots = normalizedInputs.reduce((sum, item) => sum + item.count, 0);
-  const pattern: string[] = [];
-  const accumulators = normalizedInputs.map(() => 0);
-
-  for (let step = 0; step < totalSlots; step++) {
-    let bestIndex = 0;
-    let maxVal = -1;
-
-    for (let i = 0; i < normalizedInputs.length; i++) {
-      accumulators[i] += normalizedInputs[i].count;
-      if (accumulators[i] > maxVal) {
-        maxVal = accumulators[i];
-        bestIndex = i;
-      }
-    }
-
-    pattern.push(normalizedInputs[bestIndex].itemId);
-    accumulators[bestIndex] -= totalSlots;
-  }
-
-  return pattern;
-}
-
 export const BeltSequencePattern: React.FC<BeltSequencePatternProps> = ({
   recipe,
   sequenceInfo: providedSequenceInfo,
@@ -72,6 +38,7 @@ export const BeltSequencePattern: React.FC<BeltSequencePatternProps> = ({
   feedRateTotal,
   defaultExpanded = false,
 }) => {
+  const DSP_ITEMS = useDSPItems();
   const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
   const [copied, setCopied] = useState(false);
   const [showFormulaTip, setShowFormulaTip] = useState(false);
@@ -85,15 +52,12 @@ export const BeltSequencePattern: React.FC<BeltSequencePatternProps> = ({
   // Compute sequence info from recipe if not directly provided
   const resolvedSequenceInfo: BeltSequenceInfo | null = React.useMemo(() => {
     if (providedSequenceInfo) return providedSequenceInfo;
-    if (!recipe || !recipe.inputs || recipe.inputs.length === 0) return null;
+    if (!recipe || !supportsMixedRecipe(recipe)) return null;
 
-    const pattern = computeInterleavedSequence(recipe.inputs);
-    const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
-    const gcdDivisor = recipe.inputs.length > 0
-      ? recipe.inputs.reduce((acc, curr) => gcd(acc, curr.count), recipe.inputs[0].count)
-      : 1;
-
-    const totalRaw = recipe.inputs.reduce((sum, i) => sum + i.count, 0);
+    const pattern = generateInterleavedPattern(recipe.inputs);
+    const normalized = normalizeRecipeInputs(recipe.inputs);
+    const gcdDivisor = normalized.divisor;
+    const totalRaw = pattern.length;
 
     const steps = pattern.map((itemId, idx) => {
       const itemData = DSP_ITEMS[itemId] || { name: itemId, color: '#38bdf8', iconSymbol: itemId.slice(0, 2) };
@@ -106,9 +70,9 @@ export const BeltSequencePattern: React.FC<BeltSequencePatternProps> = ({
       };
     });
 
-    const itemBreakdown = recipe.inputs.map(inp => {
+    const itemBreakdown = normalized.inputs.map(inp => {
       const itemData = DSP_ITEMS[inp.itemId] || { name: inp.itemId, color: '#38bdf8', iconSymbol: inp.itemId.slice(0, 2) };
-      const countInCycle = Math.round(inp.count / (gcdDivisor > 0 ? gcdDivisor : 1));
+      const countInCycle = inp.count;
       const ratioPercent = totalRaw > 0 ? Number(((inp.count / totalRaw) * 100).toFixed(1)) : 0;
       return {
         itemId: inp.itemId,
@@ -127,7 +91,7 @@ export const BeltSequencePattern: React.FC<BeltSequencePatternProps> = ({
       steps,
       itemBreakdown,
     };
-  }, [recipe, providedSequenceInfo]);
+  }, [recipe, providedSequenceInfo, DSP_ITEMS]);
 
   if (!resolvedSequenceInfo || !resolvedSequenceInfo.steps || resolvedSequenceInfo.steps.length === 0) {
     return null;
@@ -190,7 +154,7 @@ export const BeltSequencePattern: React.FC<BeltSequencePatternProps> = ({
               </h3>
             </div>
             <p className="text-xs text-slate-400">
-              精确平摊各种原料的进料槽位，杜绝“同种原料扎堆”引发的抓取延迟与局部断粮
+              按比例展示货物包序列；假定各支线先形成相同堆叠高度，局部供料仍需验证
             </p>
           </div>
         </div>
@@ -341,13 +305,13 @@ export const BeltSequencePattern: React.FC<BeltSequencePatternProps> = ({
             <div className="space-y-1">
               <p className="font-semibold text-cyan-200">高端黑盒防卡带实战进料技巧：</p>
               <p>
-                1. <strong>四向分流器 / 集装箱比例控流</strong>：使用四向分流器的优先级输出或支线输入配比，将各原料按下方交错顺序依次汇入主混带。
+                1. <strong>四向分流器 / 集装箱比例控流</strong>：先在各支线堆叠，再按货物包比例控流；分流器优先级不能保证精确逐格顺序。
               </p>
               <p>
-                2. <strong>杜绝成堆输入</strong>：若一次性送入 10 个铁块再送 1 个磁铁，靠近前段的制造台会全部抓光磁铁，造成后段制造台因“缺磁铁”停产并堆积铁块，最终触发回流死锁。
+                2. <strong>检查局部供料</strong>：若一次性送入 10 个铁块再送 1 个磁铁，靠近前段的制造台会全部抓光磁铁，造成后段制造台因“缺磁铁”停产并堆积铁块，可能造成回流堵塞。
               </p>
               <p>
-                3. <strong>闭环反涌优先级</strong>：在混带起始交汇点，务必将<strong>残料回流线</strong>设为四向分流器的“优先输入端”，确保旧原料被优先消化。
+                3. <strong>闭环反涌优先级</strong>：在混带起始交汇点，务必将<strong>残料回流线</strong>设为四向分流器的“优先输入端”，让回流优先进入；仍需控制补料、库存和输出通畅。
               </p>
             </div>
           </div>

@@ -1,3 +1,4 @@
+import { useDSPItems } from '../data/GameDataContext';
 import React, { useState, useEffect } from 'react';
 import { 
   Zap, 
@@ -18,7 +19,7 @@ import {
   Atom,
   HelpCircle
 } from 'lucide-react';
-import { CalculationInput, CalculationResult } from '../engine/calculator';
+import { CalculationInput, CalculationResult, calculateDSPMixedBelt } from '../engine/calculator';
 import { DSP_ITEMS, DSPRecipe } from '../data/dspData';
 import { DSPItemIcon, DSPFacilityIcon } from './DSPItemIcon';
 
@@ -33,6 +34,8 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
   inputState,
   onChangeInput,
 }) => {
+  const DSP_ITEMS = useDSPItems();
+  const format = (value:number) => value.toLocaleString('zh-CN',{maximumFractionDigits:3});
   const { powerStats, proliferatorComparison, actualFacilitiesCount, maxFacilitiesLimit, beltCapacity } = result;
   const facility = inputState?.facility;
   const recipe = inputState?.recipe;
@@ -45,28 +48,24 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
 
   // Actual output rates
   const currentOutputPerMin = proliferatorComparison.currentOutputPerMin;
-  const currentOutputPerSec = Number((currentOutputPerMin / 60).toFixed(2));
-  const singleFacilityOutputPerMin = actualFacilitiesCount > 0 
-    ? Number((currentOutputPerMin / actualFacilitiesCount).toFixed(2)) 
-    : 0;
-  const singleFacilityOutputPerSec = actualFacilitiesCount > 0 
-    ? Number((currentOutputPerSec / actualFacilitiesCount).toFixed(3)) 
-    : 0;
+  const currentOutputPerSec = currentOutputPerMin / 60;
+  const singleFacilityOutputPerSec = result.outputs[0]?.ratePerFacility ?? (actualFacilitiesCount > 0 ? currentOutputPerSec / actualFacilitiesCount : 0);
+  const singleFacilityOutputPerMin = singleFacilityOutputPerSec * 60;
 
   // Power breakdown metrics
   const totalPowerMW = powerStats.totalPowerMW;
   const facilityPowerMW = powerStats.facilityPowerMW;
   const sortersPowerMW = powerStats.sortersPowerMW;
   const powerIncreasePercent = powerStats.powerIncreasePercent;
-  const proliferatorDeltaMW = Number((facilityPowerMW - powerStats.baselineFacilityPowerMW).toFixed(3));
+  const proliferatorDeltaMW = (facilityPowerMW - powerStats.baselineFacilityPowerMW);
 
   // Power percentages
   const facilityPowerPercent = totalPowerMW > 0 ? Math.round((facilityPowerMW / totalPowerMW) * 100) : 0;
   const sortersPowerPercent = totalPowerMW > 0 ? 100 - facilityPowerPercent : 0;
 
   // Energy intensity per unit
-  const energyPerItemMJ = currentOutputPerSec > 0 ? Number((totalPowerMW / currentOutputPerSec).toFixed(3)) : 0;
-  const energyPer10kKwh = Number(((energyPerItemMJ * 10000) / 3.6).toFixed(1));
+  const energyPerItemMJ = currentOutputPerSec > 0 ? (totalPowerMW / currentOutputPerSec) : 0;
+  const energyPer10kKwh = ((energyPerItemMJ * 10000) / 3.6);
 
   // Interactive Target Output Simulator
   const [targetYieldPerMin, setTargetYieldPerMin] = useState<number>(currentOutputPerMin);
@@ -86,19 +85,23 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
     : 0.054;
 
   const simulatedRequiredFacilities = singleFacilityOutputPerMin > 0 
-    ? Math.max(1, Math.ceil(targetYieldPerMin / singleFacilityOutputPerMin)) 
-    : 1;
+    ? Math.max(0, Math.ceil(targetYieldPerMin / singleFacilityOutputPerMin - 1e-9))
+    : 0;
 
-  const simulatedFacilityPowerMW = Number((simulatedRequiredFacilities * singleFacBasePowerMW).toFixed(3));
-  const simulatedSorterPowerMW = Number((simulatedRequiredFacilities * sorterPowerPerFacilityMW).toFixed(3));
-  const simulatedTotalPowerMW = Number((simulatedFacilityPowerMW + simulatedSorterPowerMW).toFixed(2));
-  const simulatedOutputPerSec = Number((targetYieldPerMin / 60).toFixed(2));
+  let simulatedPower: CalculationResult['powerStats'] | undefined;
+  if (inputState) {
+    try { simulatedPower = calculateDSPMixedBelt({...inputState,customFacilityCount:simulatedRequiredFacilities},DSP_ITEMS).powerStats; } catch { /* invalid input is reported by the workspace */ }
+  }
+  const simulatedFacilityPowerMW = simulatedPower?.facilityPowerMW ?? simulatedRequiredFacilities * singleFacBasePowerMW;
+  const simulatedSorterPowerMW = (simulatedPower?.sortersPowerMW ?? simulatedRequiredFacilities * sorterPowerPerFacilityMW);
+  const simulatedTotalPowerMW = (simulatedFacilityPowerMW + simulatedSorterPowerMW);
+  const simulatedOutputPerSec = (targetYieldPerMin / 60);
 
   // Generator equivalents for the simulated power
   const simWindCount = Math.ceil(simulatedTotalPowerMW / 0.3);
   const simThermalCount = Math.ceil(simulatedTotalPowerMW / 2.16);
   const simFusionCount = Math.ceil(simulatedTotalPowerMW / 15.0);
-  const simStarCount = Math.max(1, Math.ceil(simulatedTotalPowerMW / 72.0));
+  const simStarCount = Math.ceil(simulatedTotalPowerMW / 72.0);
 
   // Handle applying simulated facility count
   const handleApplySimulatedCount = () => {
@@ -131,7 +134,7 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              根据当前选择的生产机器、增产倍率及产出速度，精确推演全线设备与分拣抓取总电耗
+              根据当前选择的生产机器、增产倍率及产出速度，估算全线设备与分拣器的额定运行功耗
             </p>
           </div>
         </div>
@@ -167,7 +170,7 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
 
           <div className="my-2 flex items-baseline gap-1.5">
             <span className="text-3xl font-extrabold font-mono text-amber-400 tabular-nums tracking-tight">
-              {totalPowerMW}
+              {format(totalPowerMW)}
             </span>
             <span className="text-xs font-mono text-amber-200 font-bold uppercase">
               MW
@@ -199,7 +202,7 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
 
           <div className="my-2 flex items-baseline gap-1.5">
             <span className="text-3xl font-extrabold font-mono text-cyan-300 tabular-nums tracking-tight">
-              {currentOutputPerMin}
+              {format(currentOutputPerMin)}
             </span>
             <span className="text-xs font-mono text-cyan-200 font-bold uppercase">
               件/分
@@ -209,7 +212,7 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
           <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 border-t border-slate-800/80 pt-1.5">
             <span>秒级输出:</span>
             <span className="text-cyan-300 font-bold">
-              {currentOutputPerSec} 件/秒
+              {format(currentOutputPerSec)} 件/秒
             </span>
           </div>
         </div>
@@ -230,7 +233,7 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
             <div className="flex items-baseline justify-between font-mono">
               <span className="text-[11px] text-slate-400">单机产速:</span>
               <span className="text-sm font-bold text-emerald-300 tabular-nums">
-                {singleFacilityOutputPerMin} 件/分 <span className="text-[10px] text-slate-500">({singleFacilityOutputPerSec}/s)</span>
+                {format(singleFacilityOutputPerMin)} 件/分 <span className="text-[10px] text-slate-500">({format(singleFacilityOutputPerSec)}/s)</span>
               </span>
             </div>
             <div className="flex items-baseline justify-between font-mono">
@@ -261,7 +264,7 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
 
           <div className="my-2 flex items-baseline gap-1.5">
             <span className="text-3xl font-extrabold font-mono text-indigo-300 tabular-nums tracking-tight">
-              {energyPerItemMJ}
+              {format(energyPerItemMJ)}
             </span>
             <span className="text-xs font-mono text-indigo-200 font-bold uppercase">
               MJ / 件
@@ -271,7 +274,7 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
           <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 border-t border-slate-800/80 pt-1.5">
             <span>每万件电量:</span>
             <span className="text-indigo-300 font-bold">
-              ~{energyPer10kKwh} 度电
+              ~{format(energyPer10kKwh)} 度电
             </span>
           </div>
         </div>
@@ -284,7 +287,7 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <span className="text-slate-300 font-bold flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5 text-cyan-400" />
-            整线能耗结构细分占比 (总计 {totalPowerMW} MW)
+            整线能耗结构细分占比 (总计 {format(totalPowerMW)} MW)
           </span>
           <span className="text-[11px] text-slate-400 font-mono">
             生产主机 ({actualFacilitiesCount}台) + 进出分拣爪 ({powerStats.sorterCountTotal}支)
@@ -296,12 +299,12 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
           <div 
             className="h-full bg-amber-400 rounded-l-full transition-all duration-300"
             style={{ width: `${facilityPowerPercent}%` }}
-            title={`生产设备耗电: ${facilityPowerMW} MW (${facilityPowerPercent}%)`}
+            title={`生产设备耗电: ${format(facilityPowerMW)} MW (${facilityPowerPercent}%)`}
           />
           <div 
             className="h-full bg-indigo-500 rounded-r-full transition-all duration-300"
             style={{ width: `${sortersPowerPercent}%` }}
-            title={`分拣爪运行耗电: ${sortersPowerMW} MW (${sortersPowerPercent}%)`}
+            title={`分拣爪运行耗电: ${format(sortersPowerMW)} MW (${sortersPowerPercent}%)`}
           />
         </div>
 
@@ -313,7 +316,7 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
               <span className="text-slate-300 text-[11px]">生产设备主体耗电:</span>
             </div>
             <span className="font-bold text-amber-300">
-              {facilityPowerMW} MW <span className="text-[10px] text-slate-500 font-normal">({facilityPowerPercent}%)</span>
+              {format(facilityPowerMW)} MW <span className="text-[10px] text-slate-500 font-normal">({facilityPowerPercent}%)</span>
             </span>
           </div>
 
@@ -323,7 +326,7 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
               <span className="text-slate-300 text-[11px]">分拣爪抓取耗电:</span>
             </div>
             <span className="font-bold text-indigo-300">
-              {sortersPowerMW} MW <span className="text-[10px] text-slate-500 font-normal">({sortersPowerPercent}%)</span>
+              {format(sortersPowerMW)} MW <span className="text-[10px] text-slate-500 font-normal">({sortersPowerPercent}%)</span>
             </span>
           </div>
 
@@ -364,11 +367,11 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
           <div className="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded border border-slate-700">
             <input
               type="number"
-              min="1"
+              min="0"
               max="100000"
               value={targetYieldPerMin}
               onChange={e => {
-                const val = Math.max(1, Number(e.target.value) || 1);
+                const val = Math.max(0, Number(e.target.value) || 0);
                 setTargetYieldPerMin(val);
                 setIsSimulatingCustom(true);
               }}
@@ -433,7 +436,7 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
               </div>
             </div>
             <span className="text-[10px] text-slate-500">
-              单台 {singleFacilityOutputPerMin} 件/分
+              单台 {format(singleFacilityOutputPerMin)} 件/分
             </span>
           </div>
 
@@ -444,12 +447,12 @@ export const PowerYieldCalculatorModule: React.FC<PowerYieldCalculatorModuleProp
                 推演总电力消耗
               </div>
               <div className="text-lg font-bold text-amber-400 mt-0.5">
-                {simulatedTotalPowerMW} MW
+                {format(simulatedTotalPowerMW)} MW
               </div>
             </div>
             <div className="text-right text-[10px] text-slate-500">
-              主机 {simulatedFacilityPowerMW} MW<br />
-              爪耗 {simulatedSorterPowerMW} MW
+              主机 {format(simulatedFacilityPowerMW)} MW<br />
+              爪耗 {format(simulatedSorterPowerMW)} MW
             </div>
           </div>
 

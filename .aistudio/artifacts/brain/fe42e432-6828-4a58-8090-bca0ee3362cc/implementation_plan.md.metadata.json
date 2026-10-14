@@ -1,6 +1,0 @@
-{
-  "summary":  "Revised implementation plan for DSP Mixed Belt Blueprint Calculator, formally integrating and validating the user's core mathematical formula JSON against Dyson Sphere Program wiki mechanics (feed rate, stack layers, 1/4 tech lock divisor, belt capacity, sorter distance decay, and loopback buffer).",
-  "updatedAt":  "2026-10-12T09:53:47.538894363Z",
-  "requestFeedback":  true,
-  "userFacing":  true
-}

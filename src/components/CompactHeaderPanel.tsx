@@ -1,3 +1,4 @@
+import { useDSPItems } from '../data/GameDataContext';
 import React, { useState } from 'react';
 import { 
   ChevronDown, 
@@ -16,17 +17,18 @@ import {
   Wrench
 } from 'lucide-react';
 import { 
-  DSP_RECIPES, 
+  DSP_RECIPES as VANILLA_RECIPES,
   DSP_FACILITIES, 
   DSP_ITEMS, 
   DSPRecipe, 
   DSPFacility,
   isMachineRecipe,
   getMachineSubcategory,
+  isFacilityCompatible,
   MachineSubcategory
 } from '../data/dspData';
 import { CalculationInput, CalculationResult } from '../engine/calculator';
-import { DSPItemIcon, DSPBeltIcon } from './DSPItemIcon';
+import { DSPItemIcon, DSPFramedItemIcon, DSPBeltIcon } from './DSPItemIcon';
 
 export type RecipeCategoryTab = 
   | 'mixed' 
@@ -40,6 +42,7 @@ export type RecipeCategoryTab =
 export type MachineSubFilter = 'all' | 'craft' | 'logistics' | 'power' | 'production' | 'defense';
 
 interface CompactHeaderPanelProps {
+  recipes?: DSPRecipe[];
   inputState: CalculationInput;
   result: CalculationResult;
   onChangeInput: (updater: (prev: CalculationInput) => CalculationInput) => void;
@@ -48,12 +51,15 @@ interface CompactHeaderPanelProps {
 }
 
 export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
+  recipes = VANILLA_RECIPES,
   inputState,
   result,
   onChangeInput,
   onOpenCustomRecipe,
   onOpenGlobalDrawer,
 }) => {
+  const DSP_ITEMS = useDSPItems();
+  const DSP_RECIPES = recipes;
   const [isExpanded, setIsExpanded] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedCategoryTab, setSelectedCategoryTab] = useState<RecipeCategoryTab>('mixed');
@@ -95,7 +101,7 @@ export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
       matrix,
       total: DSP_RECIPES.length,
     };
-  }, []);
+  }, [DSP_RECIPES]);
 
   // Memoized counts for machine sub-categories
   const machineSubCounts = React.useMemo(() => {
@@ -108,7 +114,7 @@ export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
       }
     }
     return counts;
-  }, []);
+  }, [DSP_RECIPES]);
 
   // Filter recipes for the expanded matrix
   const filteredRecipes = DSP_RECIPES.filter(r => {
@@ -139,11 +145,11 @@ export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
   });
 
   // Current category facilities
-  const matchingFacilities = DSP_FACILITIES.filter(f => f.category === recipe.facilityCategory);
+  const matchingFacilities = DSP_FACILITIES.filter(f => isFacilityCompatible(recipe, f));
   const facilityList = matchingFacilities.length > 0 ? matchingFacilities : DSP_FACILITIES;
 
   const handleSelectRecipe = (selected: DSPRecipe) => {
-    const bestFac = DSP_FACILITIES.find(f => f.category === selected.facilityCategory) || DSP_FACILITIES[0];
+    const bestFac = DSP_FACILITIES.find(f => isFacilityCompatible(selected, f)) || DSP_FACILITIES[0];
     onChangeInput(prev => ({
       ...prev,
       recipe: selected,
@@ -165,9 +171,7 @@ export const CompactHeaderPanel: React.FC<CompactHeaderPanelProps> = ({
       >
         {/* Left: Active Product & Recipe Summary */}
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-black border-2 border-[#00f0ff] p-0.5 flex items-center justify-center shadow-[2px_2px_0px_#00f0ff]">
-            <DSPItemIcon item={primaryOutputItem} size={24} />
-          </div>
+          <DSPFramedItemIcon item={primaryOutputItem} size={24} />
           
           <div className="flex flex-wrap items-baseline gap-2 min-w-0">
             <span className="text-sm font-bold text-white tracking-wide truncate">
