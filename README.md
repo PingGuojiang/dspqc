@@ -4,7 +4,7 @@
 
 戴森球计划（Dyson Sphere Program）的生产链量化与混带物流规划工具普通模式计算完整生产链，混带模式估算单段配方的物流容量，两种模式可平滑切换并独立保存配置
 
-[报告问题](https://github.com/PingGuojiang/Dyson-Sphere-Program-Quantitative-Calculator/issues) · [贡献指南](CONTRIBUTING.md) · [架构说明](docs/ARCHITECTURE.md) · [第三方来源](THIRD_PARTY_NOTICES.md)
+[在线使用](https://pingguojiang.github.io/dspqc/) · [报告问题](https://github.com/PingGuojiang/dspqc/issues) · [贡献指南](CONTRIBUTING.md) · [架构说明](docs/ARCHITECTURE.md) · [第三方来源](THIRD_PARTY_NOTICES.md)
 
 ## 目录
 
@@ -28,7 +28,7 @@
 | 结果 | 理论/部署设备数、建筑功耗、物料速率、带数 | 设备上限、进料序列、物流约束与回流示意 |
 | 2D 交互 | 图标节点、卡片拖拽、滚轮缩放、平移与布局重置 | 布局示意、物料动画、缩放、拖拽与高度切换 |
 
-- 深色工业面板与游戏物品图标，支持桌面和手机布局
+- 工业风深浅主题与游戏物品图标，支持桌面和手机布局
 - 左侧模式设定抽屉；配置、撤销历史、扩展数据与视图标签分别管理
 - 本地自动保存、分享链接、自定义配方和 JSON 数据导入
 - PWA 安装及静态资源离线缓存
@@ -38,8 +38,8 @@
 需要 **Node.js 22.12+** 和 npm
 
 ```sh
-git clone https://github.com/PingGuojiang/Dyson-Sphere-Program-Quantitative-Calculator.git
-cd Dyson-Sphere-Program-Quantitative-Calculator
+git clone https://github.com/PingGuojiang/dspqc.git
+cd dspqc
 npm ci
 npm run dev
 ```
@@ -87,7 +87,9 @@ npm run preview   # 本地预览构建结果
 
 技术栈：React、TypeScript、Vite、Tailwind CSS、javascript-lp-solver、vite-plugin-pwa
 
-部署时将 `dist/` 上传到静态站点服务使用子路径部署前，需配置 Vite 的 `base` 并验证游戏图标和 PWA 缓存路径不要提交构建产物、依赖目录、密钥或本地开发过程文件
+测试分支 `codex/dsp-dual-mode` 已通过 GitHub Actions 自动发布到 [GitHub Pages](https://pingguojiang.github.io/dspqc/)，构建时自动配置 `/dspqc/` 子路径，详见 [部署教程](docs/GITHUB_PAGES.md)
+
+自行部署时使用 `VITE_BASE_PATH` 指定子路径，根目录部署默认使用 `/`；发布前检查游戏图标和 PWA 资源路径，避免提交构建产物、依赖目录、密钥或本地开发过程文件
 
 ## 未来开发计划
 
@@ -106,7 +108,7 @@ npm run preview   # 本地预览构建结果
 - [GitHub Pages 部署教程](docs/GITHUB_PAGES.md)：子路径与 PWA 配置、Actions 工作流和发布检查
 - [架构说明](docs/ARCHITECTURE.md) · [贡献指南](CONTRIBUTING.md)
 
-Wiki 当前随源码维护，尚未同步至 GitHub 独立 Wiki仓库型 Pages 部署前需调整根路径 PWA 配置，详见教程
+Wiki 当前随源码维护，尚未同步至 GitHub 独立 Wiki；Pages 的子路径和 PWA 适配已完成，部署步骤与检查项见教程
 
 ## 项目结构
 

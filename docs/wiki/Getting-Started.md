@@ -1,6 +1,6 @@
 # 快速入门
 
-使用已部署站点，或按 [README](../../README.md) 安装 Node.js 22.12+ 后本地运行
+直接访问 [在线预览（GitHub Pages）](https://pingguojiang.github.io/dspqc/)，或按 [README](../../README.md) 安装 Node.js 22.12+ 后本地运行
 
 初次尝试建议以电磁矩阵 60 件/分钟为目标普通模式查看完整生产链，混带模式查看单配方容量；两者不是同一种计算范围
 

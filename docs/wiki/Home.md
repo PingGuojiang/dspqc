@@ -2,6 +2,8 @@
 
 戴森球计划普通生产链量化与混带物流规划工具的使用说明
 
+[在线预览（GitHub Pages）](https://pingguojiang.github.io/dspqc/) · [部署教程](../GITHUB_PAGES.md)
+
 - [快速入门](Getting-Started.md)
 - [普通量化模式](Ordinary-Mode.md)
 - [混带模式](Mixed-Belt-Mode.md)
