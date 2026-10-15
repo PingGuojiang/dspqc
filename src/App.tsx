@@ -217,7 +217,7 @@ export default function App() {
             <input ref={fileInput} type="file" accept=".json,application/json" hidden onChange={handleImportFile}/>
           </div>
         </div>
-        <p className="text-xs text-slate-400">{activeMode==='ordinary'?'按目标产量展开完整生产链，可配置外供、替代配方和每段建筑。':'规划单段混带进料、分拣器与回流排布。'} 两种模式独立保存，切换保留各自的配置和 2D 视图。</p>
+        <p className="text-xs text-slate-400">{activeMode==='ordinary'?'按目标产量展开完整生产链，可配置外供、替代配方和每段建筑。':'规划单段混带进料、分拣器与回流排布。'} 两种模式独立保存，切换保留各自的配置和 2D 视图</p>
         {notice&&<div role="status" className="border-2 border-[#2d3748] bg-slate-900 text-cyan-200 rounded-lg p-2 text-xs flex justify-between">{notice}<button type="button" onClick={()=>setNotice('')} aria-label="关闭提示">×</button></div>}
         <GameDataProvider items={state.mixed.items}>
         <div data-testid="mixed-workspace" hidden={activeMode!=='mixed'} className="space-y-4">
